@@ -188,14 +188,34 @@ def query_failed_logins(date_iso: str, username: Optional[str] = None, limit: in
 
 
 # --- OpenAI (chat) ---
+# --- OpenAI (chat) ---
 from openai import OpenAI
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+_openai_client = None
+
+def get_openai_client():
+    global _openai_client
+    if _openai_client is not None:
+        return _openai_client
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        _openai_client = OpenAI(api_key=api_key)
+        return _openai_client
+    except TypeError as e:
+        # Most common cause: httpx version mismatch
+        # Clear client so future calls can retry after you fix deps
+        _openai_client = None
+        raise RuntimeError(
+            f"OpenAI client init failed ({e}). Try: "
+            'pip install --upgrade "openai>=1.52.0" "httpx>=0.27.2,<0.28" "httpx-sse>=0.4.0"'
+        )
 
 def llm_answer(prompt: str) -> str:
-    if not openai_client:
-        # Safe fallback for dev without an API key
+    client = get_openai_client()
+    if not client:
         return "LLM is not configured (missing OPENAI_API_KEY). Here's your prompt:\n\n" + prompt[:1200]
-    resp = openai_client.chat.completions.create(
+    resp = client.chat.completions.create(
         model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         messages=[
             {"role": "system",
