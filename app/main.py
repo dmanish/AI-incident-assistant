@@ -142,26 +142,50 @@ def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any
     return docs[:top_k]
 
 # --- DuckDB log query tool ---
+from pathlib import Path
 con = duckdb.connect(DUCK_DB_PATH)
-# Create external table over CSVs if not exists (bootstrap also seeds one CSV)
+
+# Ensure directory exists so glob doesn't fail later
+LOG_DIR = ROOT / "data" / "logs" / "auth"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Create an empty table so queries won't crash if no CSVs yet
 con.execute("""
-    CREATE TABLE IF NOT EXISTS auth_logs AS
-    SELECT * FROM read_csv_auto('./data/logs/auth', union_by_name=true, filename=true) WHERE 1=0
+    CREATE TABLE IF NOT EXISTS auth_logs (
+        timestamp TIMESTAMP,
+        user      VARCHAR,
+        action    VARCHAR,
+        result    VARCHAR,
+        ip        VARCHAR
+    )
 """)
 
 def query_failed_logins(date_iso: str, username: Optional[str] = None, limit: int = 200):
-    sql = """
-        SELECT * FROM read_csv_auto('./data/logs/auth/*.csv', union_by_name=true)
-        WHERE date(timestamp) = ?
-          AND lower(result) = 'failed'
-        {}
-        ORDER BY timestamp DESC
-        LIMIT ?
-    """
+    # If there are CSVs, query them; otherwise query the empty table
+    has_files = any(LOG_DIR.glob("*.csv"))
+    if has_files:
+        sql = """
+            SELECT * FROM read_csv_auto('./data/logs/auth/*.csv', union_by_name=true)
+            WHERE date(timestamp) = ?
+              AND lower(result) = 'failed'
+            {}
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """
+    else:
+        sql = """
+            SELECT * FROM auth_logs
+            WHERE date(timestamp) = ?
+              AND lower(result) = 'failed'
+            {}
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """
     user_clause = "AND lower(user) = lower(?)" if username else ""
     params = [date_iso] + ([username] if username else []) + [limit]
     df = con.execute(sql.format(user_clause), params).fetchdf()
     return df
+
 
 # --- OpenAI (chat) ---
 from openai import OpenAI
