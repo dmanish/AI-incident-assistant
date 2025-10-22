@@ -15,6 +15,8 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import jwt
+from typing import Optional
+from fastapi import Header, HTTPException
 
 # --- Env & Paths ---
 ROOT = Path(__file__).resolve().parent.parent
@@ -90,7 +92,7 @@ def decode_jwt(token: str) -> Dict[str, Any]:
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-def require_user(auth_header: Optional[str] = Header(None)) -> Dict[str, Any]:
+def require_user(authorization: Optional[str] = Header(None, alias="Authorization")) -> dict:
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing Authorization: Bearer <token>")
     token = auth_header.split(" ", 1)[1]
