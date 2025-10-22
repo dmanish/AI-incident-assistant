@@ -3,7 +3,8 @@
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
   "features": {},
   "forwardPorts": [8080, 8000, 3000],
-  "postCreateCommand": "pip install -r requirements.txt && python scripts/bootstrap.py",
+  "postCreateCommand": "pip install -r requirements.txt && python scripts/bootstrap.py && python scripts/ingest.py",
+  "postStartCommand": "python scripts/ingest_guard.py",
   "postAttachCommand": "python -m uvicorn app.main:app --host 0.0.0.0 --port 8080",
   "customizations": {
     "vscode": {
