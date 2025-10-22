@@ -1,5 +1,5 @@
 # scripts/ingest_guard.py
-import hashlib, os, json
+import hashlib, json
 from pathlib import Path
 from subprocess import run, CalledProcessError
 

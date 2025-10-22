@@ -61,27 +61,27 @@ def chunks(text, size=800, overlap=120):
         yield " ".join(tokens[i:i+size])
         i += size - overlap
 
+# ...
 doc_paths = list(DOCS.glob("*.md"))
 if doc_paths:
     openai_api_key = os.getenv("OPENAI_API_KEY")
-    if openai_api_key:
+    if not openai_api_key:
+        print("OPENAI_API_KEY not set; skipping Chroma embedding/upsert. (Docs seeded, but no index.)")
+    else:
         embed_fn = embedding_functions.OpenAIEmbeddingFunction(
             api_key=openai_api_key, model_name="text-embedding-3-small"
         )
-    else:
-        # fallback to local mini-embedder if you add one later; for now, require OPENAI key
-        embed_fn = None
-
-    ids, docs, meta = [], [], []
-    for p in doc_paths:
-        text = p.read_text()
-        for idx, ch in enumerate(chunks(text)):
-            ids.append(f"{p.name}#{idx}")
-            docs.append(ch)
-            meta.append({"source_path": str(p), "doc_type": "policy" if "policy" in p.name else "playbook"})
-
-    # Only upsert if not already in the collection
-    if docs:
-        coll.upsert(ids=ids, documents=docs, metadatas=meta, embedding_function=embed_fn)
-
-print("Bootstrap complete: data dirs created, sample docs/logs seeded, Chroma populated.")
+        ids, docs, meta = [], [], []
+        for p in doc_paths:
+            text = p.read_text()
+            for idx, ch in enumerate(chunks(text)):
+                ids.append(f"{p.name}#{idx}")
+                docs.append(ch)
+                meta.append({
+                    "source_path": str(p),
+                    "doc_type": "policy" if "policy" in p.name else "playbook",
+                })
+        if docs:
+            # Create collection with embedding function at creation time (more robust)
+            coll = client.get_or_create_collection("security_docs", embedding_function=embed_fn)
+            coll.upsert(ids=ids, documents=docs, metadatas=meta)
