@@ -1,14 +1,25 @@
 {
-  "name": "Eos Security Assistant",
+  "name": "AI Incident Assistant",
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
-  "features": {},
-  "forwardPorts": [8080, 8000, 3000],
+  "forwardPorts": [8080],
   "postCreateCommand": "pip install -r requirements.txt && python scripts/bootstrap.py && python scripts/ingest.py",
   "postStartCommand": "python scripts/ingest_guard.py",
   "postAttachCommand": "python -m uvicorn app.main:app --host 0.0.0.0 --port 8080",
   "customizations": {
     "vscode": {
-      "extensions": ["ms-python.python", "ms-toolsai.jupyter"]
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "humao.rest-client"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.analysis.autoImportCompletions": true,
+        "python.analysis.typeCheckingMode": "basic"
+      }
     }
-  }
+  },
+  "remoteUser": "vscode",
+  "updateContentCommand": "",
+  "features": {}
 }
