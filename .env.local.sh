@@ -52,4 +52,4 @@ export BACKEND_URL="http://127.0.0.1:8080"
 export STREAMLIT_SERVER_PORT=8501
 
 # =============================================================================
-echo "✅ Environment variables loaded successfully."
+echo "Environment variables loaded successfully."
