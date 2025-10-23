@@ -8,10 +8,11 @@ import streamlit as st
 # -----------------------------
 # Config
 # -----------------------------
+import os
+import streamlit as st
+
+# Prefer env var; otherwise blank (user sets in sidebar)
 DEFAULT_BACKEND = os.getenv("BACKEND_URL", "").rstrip("/")
-if not DEFAULT_BACKEND:
-    # Same origin fallback for Codespaces port forwarding (ex: https://<codespace>-8080.app.github.dev)
-    DEFAULT_BACKEND = st.secrets.get("BACKEND_URL", "")
 
 st.set_page_config(page_title="AI Incident Assistant", page_icon="🛡️", layout="wide")
 
