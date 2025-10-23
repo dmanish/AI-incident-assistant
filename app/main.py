@@ -17,6 +17,8 @@ from pydantic import BaseModel
 import jwt
 from typing import Optional
 from fastapi import Header, HTTPException
+from openai import OpenAI
+_openai_client = None
 
 # --- Env & Paths ---
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,6 +53,43 @@ logger.addHandler(handler)
 def audit(event: Dict[str, Any]):
     event = {**event, "ts": datetime.utcnow().isoformat(timespec="seconds")}
     logger.info(json.dumps(event, ensure_ascii=False))
+
+#----Helper -------
+def fallback_answer(user_msg: str, rag_context: str, tool_section: str) -> str:
+    """Offline fallback used when OpenAI is unavailable. Summarizes from context/tool results."""
+    # Very small heuristic for the demo:
+    msg = user_msg.lower()
+    if "phishing" in msg:
+        return (
+            "Here’s a safe, high-level phishing response:\n"
+            "1) Isolate the affected device from the network.\n"
+            "2) Notify the security team / manager.\n"
+            "3) Preserve the email (headers, links) and analyze in a sandbox.\n"
+            "4) Reset credentials and enforce MFA if not enabled.\n"
+            "5) Report the domain/sender and update mail gateway rules.\n"
+            "6) Review the incident and update training/policies.\n"
+            + ("\n\nContext used:\n" + rag_context[:600] if rag_context else "")
+        )
+    if "failed login" in msg or "login attempts" in msg:
+        # Try to extract a count from the tool section if available
+        import re
+        m = re.search(r"Found:\s+(\d+)\s+rows", tool_section or "")
+        count = m.group(1) if m else "some"
+        return (
+            f"I checked the authentication logs and found {count} failed login attempts for the period/filters you asked.\n"
+            "Recommended next steps:\n"
+            "• Correlate by IP, user, and time to detect patterns.\n"
+            "• GeoIP/ASN reputation check for offending IPs.\n"
+            "• Lock or step-up auth (MFA) on impacted accounts.\n"
+            "• Review recent password resets and notify the user(s).\n"
+            "• Add rules for repeated failures and alerting."
+        )
+    # Generic fallback
+    return (
+        "Here’s a concise answer based on what I can see locally.\n"
+        + (("\nContext used:\n" + rag_context[:600]) if rag_context else "")
+        + (("\n\nTool results summary:\n" + tool_section[:400]) if tool_section else "")
+    )
 
 # --- RBAC policy ---
 if POLICY_PATH.exists():
@@ -235,21 +274,37 @@ def get_openai_client():
             'pip install --upgrade "openai>=1.52.0" "httpx>=0.27.2,<0.28" "httpx-sse>=0.4.0"'
         )
 
-def llm_answer(prompt: str) -> str:
+def get_openai_client():
+    global _openai_client
+    if _openai_client is not None:
+        return _openai_client
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    _openai_client = OpenAI(api_key=api_key)
+    return _openai_client
+
+def llm_answer(user_msg: str, rag_context: str, tool_section: str) -> str:
+    """Try OpenAI; on any error return an offline fallback."""
     client = get_openai_client()
     if not client:
-        return "LLM is not configured (missing OPENAI_API_KEY). Here's your prompt:\n\n" + prompt[:1200]
-    resp = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        messages=[
-            {"role": "system",
-             "content": "You are a security assistant. Use provided context verbatim where appropriate. Be concise and include safe next steps."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.2,
-        max_tokens=600,
-    )
-    return resp.choices[0].message.content
+        return fallback_answer(user_msg, rag_context, tool_section)
+    try:
+        prompt = f"{user_msg}\n\nContext:{rag_context}{tool_section}"
+        resp = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system",
+                 "content": "You are a security assistant. Prefer policy/playbook excerpts from context. Be concise and give actionable next steps."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=600,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        audit({"action":"llm_fallback", "reason": str(e)})
+        return fallback_answer(user_msg, rag_context, tool_section)
 
 # --- Schemas ---
 class LoginRequest(BaseModel):
@@ -323,15 +378,17 @@ def chat(req: ChatRequest, user=Depends(require_user)):
         src = r["metadata"].get("source_path", "unknown")
         rag_context += f"\n---\nSource: {src}\n{r['text'][:1000]}"
 
+    # Build final prompt & answer
+    final_prompt = req.message  # keep for audit excerpt
+    audit({"action":"llm_invoke","user":user["sub"],"role":role,"prompt_excerpt":(final_prompt + rag_context + tool_section)[:400]})
 
-    # Build final prompt for LLM
-    final_prompt = f"{req.message}\n\nContext:{rag_context}{tool_section}"
-    audit({"action":"llm_invoke","user":user["sub"],"role":role,"prompt_excerpt":final_prompt[:400]})
-    try:
-        answer = llm_answer(final_prompt)
-    except Exception as e:
-        audit({"action":"llm_error","user":user["sub"],"role":role,"error":str(e)})
-        raise HTTPException(status_code=500, detail="LLM call failed")
+    answer = llm_answer(req.message, rag_context, tool_section)
+
+    # Minimal DLP
+    answer = re.sub(r"[A-Za-z0-9_\-]{24,}", "[REDACTED]", answer)
+
+    audit({"action":"llm_result","user":user["sub"],"role":role,"result_excerpt":answer[:400]})
+    return {"reply": answer, "retrieved": retrieved, "tool_calls": tool_calls}
 
     # (Optional) simple DLP mask for long tokens that look like secrets
     answer = re.sub(r"[A-Za-z0-9_\-]{24,}", "[REDACTED]", answer)
