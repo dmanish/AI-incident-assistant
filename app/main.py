@@ -124,15 +124,32 @@ except Exception:
     collection = None
 
 def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    """Vector-only retrieval; hybrid (BM25+vector) can be added later."""
+    """
+    Tolerant retrieval:
+    - If no collection or no embedding function, just return [].
+    - If Chroma throws (e.g., no vectors yet), return [].
+    - Always RBAC-filter by doc_type.
+    """
     if collection is None:
         return []
-    res = collection.query(query_texts=[query], n_results=20, include=["documents","metadatas","distances"])
+    try:
+        res = collection.query(
+            query_texts=[query],
+            n_results=20,
+            include=["documents", "metadatas", "distances"],
+        )
+    except Exception as e:
+        # Common when the collection has no embedding_function bound or no vectors yet
+        audit({"action": "retrieval_error", "error": str(e)})
+        return []
+
     docs = []
+    # Chroma returns lists of lists; guard for empties
+    if not res or not res.get("ids") or not res["ids"][0]:
+        return []
     for i in range(len(res["ids"][0])):
-        meta = res["metadatas"][0][i] or {}
+        meta = (res["metadatas"][0][i] or {})
         doc_type = meta.get("doc_type", "kb")
-        # RBAC doc filter
         if not role_allows_doc(role, doc_type):
             continue
         docs.append({
@@ -140,8 +157,8 @@ def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any
             "metadata": meta,
             "score": float(res["distances"][0][i]) if res.get("distances") else None
         })
-    # Take top_k after RBAC filter
     return docs[:top_k]
+
 
 # --- DuckDB log query tool ---
 from pathlib import Path
