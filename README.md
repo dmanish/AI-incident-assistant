@@ -1,153 +1,73 @@
-# 🧠 AI Incident Assistant
+# React + TypeScript + Vite
 
-This project is a **security incident assistant** that combines **LLM-based reasoning** with **log analysis** and **policy retrieval (RAG)**.  
-It helps security or engineering users answer questions like:
-> “Show me today’s failed login attempts for user `jdoe`”  
-> “What’s the escalation path for a production outage caused by a security breach?”
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
----
+Currently, two official plugins are available:
 
-## 🚀 How to Run
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-This project supports **two modes**:
-- **Option 1 – Run directly in GitHub Codespaces** (best for development/demo)
-- **Option 2 – Run locally with Docker Compose** (best for reproducible local or production-style setups)
+## React Compiler
 
----
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-### ✅ Option 1 — Run Directly in GitHub Codespaces
+## Expanding the ESLint configuration
 
-This is the simplest and fastest setup.  
-All dependencies are automatically installed and data is bootstrapped on startup.
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-#### Steps
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-# 2. Bootstrap and ingest sample data
-python scripts/bootstrap.py
-
-# 3. Start the backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
-
-# 4. (Optional) Start the Streamlit UI in a new terminal
-streamlit run frontend/streamlit_app.py
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-#### URLs (within Codespaces)
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-- **API Backend** → <https://<your-codespace-id>-8080.app.github.dev/healthz>  
-- **Streamlit UI** → <https://<your-codespace-id>-8501.app.github.dev/>
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-💡 *If the backend port is marked “Private”, make it “Public” in the Codespaces Ports tab to allow Streamlit access.*
-
----
-
-### 🐳 Option 2 — Run Locally with Docker Compose
-
-This method mirrors how the assistant would run in production:  
-isolated containers for **API** and **UI**, both talking over an internal Docker network.
-
-#### Steps
-
-```bash
-# 1. Build and start everything
-docker compose -f docker/docker-compose.yml up --build
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
-
-This will:
-- Build images using the Dockerfile in `docker/`
-- Run the backend (`ai-incident-api`) on port **8080**
-- Run the frontend (`ai-incident-ui`) on port **8501**
-- Run bootstrap + ingestion automatically inside the API container
-
-#### Access the apps
-
-- **Backend API health** → [http://localhost:8080/healthz](http://localhost:8080/healthz)  
-  → should return `ok`
-- **Streamlit UI** → [http://localhost:8501](http://localhost:8501)
-
----
-
-## 🧩 Container Management & Debugging
-
-### Inspect running containers
-```bash
-docker ps
-```
-
-### Enter the API container shell
-```bash
-docker exec -it ai-incident-api /bin/bash
-```
-
-### Check logs
-```bash
-docker logs -f ai-incident-api
-docker logs -f ai-incident-ui
-```
-
-### Restart only the API service
-```bash
-docker compose restart api
-```
-
----
-
-## ⚙️ Environment Configuration
-
-All runtime configuration lives in `.env.local.sh` (for local Docker) or `.env` (for Codespaces).
-
-Example `.env.local.sh`:
-
-```bash
-#!/usr/bin/env bash
-# ===============================
-# AI Incident Assistant Settings
-# ===============================
-
-# OpenAI API key (optional; fallback to CPU embeddings if missing)
-export OPENAI_API_KEY="sk-..."
-
-# JWT secret for authentication tokens
-export JWT_SECRET="supersecret"
-
-# Which embedding backend to use: openai or local
-#   local  → all-MiniLM-L6-v2 (CPU)
-#   openai → text-embedding-3-small
-export EMBED_BACKEND="local"
-
-# Backend & data directories
-export CHROMA_DB_DIR="/app/data/chroma"
-export DUCK_DB_PATH="/app/data/logs/security.duckdb"
-
-# Audit log directory
-export AUDIT_DIR="/app/data/logs"
-
-# Streamlit backend URL (used by UI)
-export BACKEND_URL="http://ai-incident-api:8080"
-
-echo "✅ Environment variables loaded successfully."
-```
-
-Make it executable:
-```bash
-chmod +x .env.local.sh
-```
-
----
-
-## 💬 API Quick Test
-
-Once running, verify the `/chat` route works:
-
-```bash
-# 1. Login to get a token
-curl -s -X POST http://localhost:8080/login   -H "Content-Type: application/json"   -d '{"email":"alice@company","password":"pass1"}' | jq .
-
-# 2. Use the token in chat
-curl -s -X POST http://localhost:8080/chat   -H "Authorization: Bearer <paste_token_here>"   -H "Content-Type: application/json"   -d '{"message":"Show me today’s failed login attempts for username jdoe"}' | jq .
-```
-
