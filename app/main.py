@@ -203,7 +203,6 @@ def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any
 
     return out[:top_k]
 
-
 # --- DuckDB log query tool ---
 from pathlib import Path
 con = duckdb.connect(DUCK_DB_PATH)
@@ -225,57 +224,36 @@ con.execute("""
 
 def query_failed_logins(date_iso: str, username: Optional[str] = None, limit: int = 200):
     """
-    Robust log query over data/logs/auth/*.csv
-    - Works whether 'timestamp' is parsed as TIMESTAMP or TEXT
-    - Returns empty DataFrame if folder is empty
-    - Falls back to string-prefix date filter if date() cast fails
-    - Raises RuntimeError only if both strategies fail
+    File-backed DuckDB, short-lived connection. Robust by filtering timestamp as text prefix.
     """
     import pandas as pd
     log_dir = ROOT / "data" / "logs" / "auth"
     log_dir.mkdir(parents=True, exist_ok=True)
-
     files = list(log_dir.glob("*.csv"))
     if not files:
         return pd.DataFrame([])
 
-    con_local = duckdb.connect(DUCK_DB_PATH)
-
-    # First attempt: TIMESTAMP-aware
+    con = duckdb.connect(DUCK_DB_PATH, read_only=False)
     try:
+        con.execute("PRAGMA threads=2;")
+        con.execute("PRAGMA memory_limit='256MB';")
+
         user_clause = "AND lower(user) = lower(?)" if username else ""
         sql = f"""
-            SELECT *
-            FROM read_csv_auto('data/logs/auth/*.csv', union_by_name=true)
-            WHERE date(timestamp) = ?
+            SELECT timestamp, user, action, result, ip
+            FROM read_csv_auto('{(log_dir / "*.csv").as_posix()}', union_by_name=true)
+            WHERE cast(timestamp as varchar) LIKE ?
               AND lower(result) = 'failed'
               {user_clause}
             ORDER BY timestamp DESC
             LIMIT ?
         """
-        params = [date_iso] + ([username] if username else []) + [limit]
-        df = con_local.execute(sql, params).fetchdf()
+        params = [f"{date_iso}%"] + ([username] if username else []) + [limit]
+        df = con.execute(sql, params).fetchdf()
         return df
-    except Exception as e_primary:
-        # Fallback: string prefix on timestamp (covers TEXT timestamp columns)
-        try:
-            user_clause = "AND lower(user) = lower(?)" if username else ""
-            sql2 = f"""
-                SELECT *
-                FROM read_csv_auto('data/logs/auth/*.csv', union_by_name=true)
-                WHERE cast(timestamp as varchar) LIKE ?
-                  AND lower(result) = 'failed'
-                  {user_clause}
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """
-            params2 = [f"{date_iso}%"] + ([username] if username else []) + [limit]
-            df2 = con_local.execute(sql2, params2).fetchdf()
-            return df2
-        except Exception as e_fallback:
-            raise RuntimeError(
-                f"DuckDB log query failed. primary={e_primary}; fallback={e_fallback}"
-            )
+    finally:
+        con.close()
+
 
 # --- OpenAI (chat) ---
 # --- OpenAI (chat) ---
@@ -389,9 +367,10 @@ def chat(req: ChatRequest, user=Depends(require_user)):
         try:
             df = query_failed_logins(day, username=username)
             sample = df.head(5).to_dict(orient="records")
+            sample = df.head(5).to_dict(orient="records")
             tool_section = (
                 f"\n---\nTool: log_query\nDate: {day}\nUsername: {username}\n"
-                f"Found: {len(df)} rows\nSample: {json.dumps(sample)[:1000]}"
+                f"Found: {len(df)} rows\nSample: {json.dumps(sample, default=str)[:1000]}"
             )
             tool_calls.append({
                 "tool": "log_query",
