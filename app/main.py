@@ -93,9 +93,10 @@ def decode_jwt(token: str) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 def require_user(authorization: Optional[str] = Header(None, alias="Authorization")) -> dict:
-    if not auth_header or not auth_header.startswith("Bearer "):
+    # Expect: Authorization: Bearer <token>
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing Authorization: Bearer <token>")
-    token = auth_header.split(" ", 1)[1]
+    token = authorization.split(" ", 1)[1]
     user = decode_jwt(token)
     return user
 
