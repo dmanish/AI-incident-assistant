@@ -127,38 +127,42 @@ except Exception:
 def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any]]:
     """
     Tolerant retrieval:
-    - If no collection or no embedding function, just return [].
-    - If Chroma throws (e.g., no vectors yet), return [].
-    - Always RBAC-filter by doc_type.
+    - If collection is missing or has no vectors/embedding, return [].
+    - Any Chroma errors are caught and logged; we continue without RAG.
     """
     if collection is None:
+        audit({"action": "retrieval_skip", "reason": "no_collection"})
         return []
     try:
         res = collection.query(
             query_texts=[query],
             n_results=20,
-            include=["documents", "metadatas", "distances"],
+            include=["documents", "metadatas", "distances", "embeddings"],  # embeddings just in case
         )
     except Exception as e:
-        # Common when the collection has no embedding_function bound or no vectors yet
         audit({"action": "retrieval_error", "error": str(e)})
         return []
 
-    docs = []
-    # Chroma returns lists of lists; guard for empties
-    if not res or not res.get("ids") or not res["ids"][0]:
+    if not res or not res.get("ids") or not res["ids"] or not res["ids"][0]:
         return []
-    for i in range(len(res["ids"][0])):
-        meta = (res["metadatas"][0][i] or {})
+
+    out: List[Dict[str, Any]] = []
+    docs0 = res.get("documents", [[]])[0] or []
+    metas0 = res.get("metadatas", [[]])[0] or []
+    dists0 = (res.get("distances", [[]]) or [[]])[0] or []
+
+    for i in range(min(len(docs0), len(metas0))):
+        meta = metas0[i] or {}
         doc_type = meta.get("doc_type", "kb")
         if not role_allows_doc(role, doc_type):
             continue
-        docs.append({
-            "text": res["documents"][0][i],
+        out.append({
+            "text": docs0[i],
             "metadata": meta,
-            "score": float(res["distances"][0][i]) if res.get("distances") else None
+            "score": float(dists0[i]) if i < len(dists0) and dists0[i] is not None else None,
         })
-    return docs[:top_k]
+
+    return out[:top_k]
 
 
 # --- DuckDB log query tool ---
@@ -306,12 +310,19 @@ def chat(req: ChatRequest, user=Depends(require_user)):
             audit({"action":"tool_error","user":user["sub"],"role":role,"tool":"log_query","error":str(e)})
             raise HTTPException(status_code=500, detail="Log query failed")
 
-    # Retrieval (RAG)
-    retrieved = retrieve_chunks(req.message, role=role, top_k=5)
+
+    # Retrieval (RAG) — tolerant
+    try:
+        retrieved = retrieve_chunks(req.message, role=role, top_k=5)
+    except Exception as e:
+        audit({"action": "retrieval_unhandled_error", "error": str(e)})
+        retrieved = []
+
     rag_context = ""
     for r in retrieved:
         src = r["metadata"].get("source_path", "unknown")
         rag_context += f"\n---\nSource: {src}\n{r['text'][:1000]}"
+
 
     # Build final prompt for LLM
     final_prompt = f"{req.message}\n\nContext:{rag_context}{tool_section}"
