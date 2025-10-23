@@ -436,3 +436,27 @@ def chat(req: ChatRequest, user=Depends(require_user)):
 
     audit({"action":"llm_result","user":user["sub"],"role":role,"result_excerpt":answer[:400]})
     return {"reply": answer, "retrieved": retrieved, "tool_calls": tool_calls}
+
+class LogsQuery(BaseModel):
+    date: Optional[str] = None  # "YYYY-MM-DD" (defaults to UTC today)
+    username: Optional[str] = None
+    limit: int = 200
+
+@app.post("/logs/query")
+def logs_query(req: LogsQuery, user=Depends(require_user)):
+    role = user.get("role")
+    if not role_allows_tool(role, "log_query"):
+        raise HTTPException(status_code=403, detail="Your role is not authorized to query logs.")
+    day = req.date or datetime.utcnow().date().isoformat()
+    try:
+        df = query_failed_logins(day, username=req.username, limit=req.limit)
+        return {
+            "date": day,
+            "username": req.username,
+            "result_count": int(len(df)),
+            "rows": json.loads(df.to_json(orient="records", date_format="iso"))
+        }
+    except Exception as e:
+        audit({"action": "tool_error", "tool": "log_query", "error": str(e)})
+        raise HTTPException(status_code=400, detail="Log query failed")
+
