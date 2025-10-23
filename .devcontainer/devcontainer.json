@@ -3,7 +3,7 @@
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
   "forwardPorts": [8080],
   "postCreateCommand": "pip install -r requirements.txt && python scripts/bootstrap.py && python scripts/ingest.py",
-  "postStartCommand": "python scripts/ingest_guard.py",
+  "postStartCommand": "source .env.local.sh && python scripts/ingest_guard.py",
   "customizations": {
     "vscode": {
       "extensions": [
