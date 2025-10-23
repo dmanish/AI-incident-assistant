@@ -2,9 +2,8 @@ version: "3.9"
 
 services:
   api:
-    build:
-      context: ..                 # <-- repo root as build context
-      dockerfile: docker/Dockerfile
+    build: ./docker
+    container_name: ai-incident-api
     ports:
       - "8080:8080"
     env_file:
@@ -17,9 +16,46 @@ services:
       - ../app:/app/app
       - ../scripts:/app/scripts
       - ../data:/app/data
+      - ../frontend:/app/frontend
+      - ../requirements.txt:/app/requirements.txt:ro
     command: >
-      /bin/sh -c "
-      python scripts/bootstrap.py &&
-      python scripts/ingest_guard.py &&
-      python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+      bash -c "
+        python scripts/bootstrap.py &&
+        python scripts/ingest_guard.py &&
+        python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
       "
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  ui:
+    build: ./docker
+    container_name: ai-incident-ui
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    env_file:
+      - ../.env
+    environment:
+      # Talk to backend via Docker DNS name "api"
+      BACKEND_URL: http://api:8080
+      # Streamlit noise reduction (optional)
+      STREAMLIT_SERVER_HEADLESS: "true"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    volumes:
+      - ../frontend:/app/frontend
+      - ../requirements.txt:/app/requirements.txt:ro
+    command: >
+      bash -c "
+        streamlit run /app/frontend/streamlit_app.py
+        --server.port 8501 --server.address 0.0.0.0
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8501/healthz || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
