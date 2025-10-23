@@ -224,31 +224,58 @@ con.execute("""
 """)
 
 def query_failed_logins(date_iso: str, username: Optional[str] = None, limit: int = 200):
-    # If there are CSVs, query them; otherwise query the empty table
-    has_files = any(LOG_DIR.glob("*.csv"))
-    if has_files:
-        sql = """
-            SELECT * FROM read_csv_auto('./data/logs/auth/*.csv', union_by_name=true)
-            WHERE date(timestamp) = ?
-              AND lower(result) = 'failed'
-            {}
-            ORDER BY timestamp DESC
-            LIMIT ?
-        """
-    else:
-        sql = """
-            SELECT * FROM auth_logs
-            WHERE date(timestamp) = ?
-              AND lower(result) = 'failed'
-            {}
-            ORDER BY timestamp DESC
-            LIMIT ?
-        """
-    user_clause = "AND lower(user) = lower(?)" if username else ""
-    params = [date_iso] + ([username] if username else []) + [limit]
-    df = con.execute(sql.format(user_clause), params).fetchdf()
-    return df
+    """
+    Robust log query over data/logs/auth/*.csv
+    - Works whether 'timestamp' is parsed as TIMESTAMP or TEXT
+    - Returns empty DataFrame if folder is empty
+    - Falls back to string-prefix date filter if date() cast fails
+    - Raises RuntimeError only if both strategies fail
+    """
+    import pandas as pd
+    log_dir = ROOT / "data" / "logs" / "auth"
+    log_dir.mkdir(parents=True, exist_ok=True)
 
+    files = list(log_dir.glob("*.csv"))
+    if not files:
+        return pd.DataFrame([])
+
+    con_local = duckdb.connect(DUCK_DB_PATH)
+
+    # First attempt: TIMESTAMP-aware
+    try:
+        user_clause = "AND lower(user) = lower(?)" if username else ""
+        sql = f"""
+            SELECT *
+            FROM read_csv_auto('data/logs/auth/*.csv', union_by_name=true)
+            WHERE date(timestamp) = ?
+              AND lower(result) = 'failed'
+              {user_clause}
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """
+        params = [date_iso] + ([username] if username else []) + [limit]
+        df = con_local.execute(sql, params).fetchdf()
+        return df
+    except Exception as e_primary:
+        # Fallback: string prefix on timestamp (covers TEXT timestamp columns)
+        try:
+            user_clause = "AND lower(user) = lower(?)" if username else ""
+            sql2 = f"""
+                SELECT *
+                FROM read_csv_auto('data/logs/auth/*.csv', union_by_name=true)
+                WHERE cast(timestamp as varchar) LIKE ?
+                  AND lower(result) = 'failed'
+                  {user_clause}
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """
+            params2 = [f"{date_iso}%"] + ([username] if username else []) + [limit]
+            df2 = con_local.execute(sql2, params2).fetchdf()
+            return df2
+        except Exception as e_fallback:
+            raise RuntimeError(
+                f"DuckDB log query failed. primary={e_primary}; fallback={e_fallback}"
+            )
 
 # --- OpenAI (chat) ---
 # --- OpenAI (chat) ---
@@ -337,36 +364,61 @@ def login(req: LoginRequest):
 @app.post("/chat")
 def chat(req: ChatRequest, user=Depends(require_user)):
     role = user.get("role")
-    # Prompt-injection guard
+
+    # ----- Prompt-injection guard -----
     if is_injection(req.message):
         audit({"action": "blocked_prompt_injection", "user": user["sub"], "role": role, "prompt": req.message})
         raise HTTPException(status_code=400, detail="Potential prompt injection detected and blocked.")
 
-    # Agentic decision: call log tool if intent suggests
+    # ----- Agentic tool: log_query (RBAC + robust) -----
     tool_section = ""
     tool_calls = []
     msg_low = req.message.lower()
+
     if any(k in msg_low for k in ["failed login", "failed logins", "show logs", "login attempts"]):
         if not role_allows_tool(role, "log_query"):
             audit({"action": "unauthorized_tool_access", "user": user["sub"], "role": role, "tool": "log_query"})
             raise HTTPException(status_code=403, detail="Your role is not authorized to query logs.")
-        # naive date parse: default to today UTC
+
+        # default to today (UTC); naive username parse
         day = datetime.utcnow().date().isoformat()
-        # optional username parse
         m = re.search(r"username\s+([a-z0-9_.-]+)", msg_low)
         username = m.group(1) if m else None
+
+        # robust query function (uses TIMESTAMP cast first, then string prefix)
         try:
             df = query_failed_logins(day, username=username)
             sample = df.head(5).to_dict(orient="records")
-            tool_section = f"\n---\nTool: log_query\nDate: {day}\nUsername: {username}\nFound: {len(df)} rows\nSample: {json.dumps(sample)[:1000]}"
-            tool_calls.append({"tool": "log_query", "date": day, "username": username, "result_count": int(len(df))})
-            audit({"action":"tool_call","user":user["sub"],"role":role,"tool":"log_query","filters":{"date":day,"username":username},"result_count":int(len(df))})
+            tool_section = (
+                f"\n---\nTool: log_query\nDate: {day}\nUsername: {username}\n"
+                f"Found: {len(df)} rows\nSample: {json.dumps(sample)[:1000]}"
+            )
+            tool_calls.append({
+                "tool": "log_query",
+                "date": day,
+                "username": username,
+                "result_count": int(len(df))
+            })
+            audit({
+                "action": "tool_call",
+                "user": user["sub"],
+                "role": role,
+                "tool": "log_query",
+                "filters": {"date": day, "username": username},
+                "result_count": int(len(df))
+            })
         except Exception as e:
-            audit({"action":"tool_error","user":user["sub"],"role":role,"tool":"log_query","error":str(e)})
-            raise HTTPException(status_code=500, detail="Log query failed")
+            audit({
+                "action": "tool_error",
+                "user": user["sub"],
+                "role": role,
+                "tool": "log_query",
+                "error": str(e)
+            })
+            # Friendly 400 (client can show message) rather than 500
+            raise HTTPException(status_code=400, detail="Log query failed")
 
-
-    # Retrieval (RAG) — tolerant
+    # ----- Retrieval (RAG) — tolerant even if Chroma has no vectors -----
     try:
         retrieved = retrieve_chunks(req.message, role=role, top_k=5)
     except Exception as e:
@@ -375,19 +427,29 @@ def chat(req: ChatRequest, user=Depends(require_user)):
 
     rag_context = ""
     for r in retrieved:
-        src = r["metadata"].get("source_path", "unknown")
-        rag_context += f"\n---\nSource: {src}\n{r['text'][:1000]}"
+        src = (r.get("metadata") or {}).get("source_path", "unknown")
+        rag_context += f"\n---\nSource: {src}\n{(r.get('text') or '')[:1000]}"
 
-    # Build final prompt & answer
-    final_prompt = req.message  # keep for audit excerpt
-    audit({"action":"llm_invoke","user":user["sub"],"role":role,"prompt_excerpt":(final_prompt + rag_context + tool_section)[:400]})
+    # ----- LLM call with graceful offline fallback -----
+    audit({
+        "action": "llm_invoke",
+        "user": user["sub"],
+        "role": role,
+        "prompt_excerpt": (req.message + rag_context + tool_section)[:400]
+    })
 
-    answer = llm_answer(req.message, rag_context, tool_section)
+    answer = llm_answer(req.message, rag_context, tool_section)  # tries OpenAI, falls back locally
 
-    # Minimal DLP
+    # Minimal DLP: redact long secret-y tokens
     answer = re.sub(r"[A-Za-z0-9_\-]{24,}", "[REDACTED]", answer)
 
-    audit({"action":"llm_result","user":user["sub"],"role":role,"result_excerpt":answer[:400]})
+    audit({
+        "action": "llm_result",
+        "user": user["sub"],
+        "role": role,
+        "result_excerpt": answer[:400]
+    })
+
     return {"reply": answer, "retrieved": retrieved, "tool_calls": tool_calls}
 
     # (Optional) simple DLP mask for long tokens that look like secrets
