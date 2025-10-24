@@ -32,6 +32,56 @@ POLICY_PATH = ROOT / "data" / "policies" / "policies.yaml"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 JWT_SECRET = os.getenv("JWT_SECRET", "devsecret")
 JWT_EXP_SECS = int(os.getenv("JWT_EXP_SECS", "3600"))
+#--- Tool calls -------
+import re
+from typing import List, Dict, Any
+from app.tools.ioc import enrich_ip
+from app.tools.cve import find_cves, cve_lookup
+
+_IP_RE = re.compile(r"\b(?:(?:2(?:5[0-5]|[0-4]\d))|1?\d?\d)(?:\.(?:(?:2(?:5[0-5]|[0-4]\d))|1?\d?\d)){3}\b")
+WEB_TOOL_ROLES = {"security", "engineering"}
+
+Inside /chat handler (after you have user_msg, user_email, user_role):
+
+tool_calls: List[Dict[str, Any]] = []
+
+def rbac_allows_web_tools(role: str) -> bool:
+    return (role or "").lower() in WEB_TOOL_ROLES
+
+ips = _IP_RE.findall(user_msg or "")
+cves = find_cves(user_msg or "")
+
+if rbac_allows_web_tools(user_role) and ips:
+    for ip in ips[:3]:
+        try:
+            res = enrich_ip(ip)
+            tool_calls.append({"tool": "ioc_enrich", "ip": ip, "result": res})
+            audit({"action": "tool_call", "tool": "ioc_enrich", "user": user_email, "role": user_role, "ok": True, "ip": ip})
+        except Exception as e:
+            audit({"action": "tool_call", "tool": "ioc_enrich", "user": user_email, "role": user_role, "ok": False, "error": str(e)[:300], "ip": ip})
+
+if rbac_allows_web_tools(user_role) and cves:
+    for cve in cves[:3]:
+        try:
+            info = cve_lookup(cve)
+            tool_calls.append({"tool": "cve_lookup", "cve": cve, "result": info})
+            audit({"action": "tool_call", "tool": "cve_lookup", "user": user_email, "role": user_role, "ok": True, "cve": cve})
+        except Exception as e:
+            audit({"action": "tool_call", "tool": "cve_lookup", "user": user_email, "role": user_role, "ok": False, "error": str(e)[:300], "cve": cve})
+
+tool_context_lines = []
+for call in tool_calls:
+    if call["tool"] == "ioc_enrich":
+        r = call["result"]
+        line = f"- IP {r.get('ip')}: score={r.get('score')} country={r.get('country')} asn={r.get('asn')} tor={r.get('is_tor')} sources={','.join(r.get('sources', []))}"
+        tool_context_lines.append(line)
+    elif call["tool"] == "cve_lookup":
+        r = call["result"]
+        kev = "YES" if r.get("kev") else "no"
+        line = f"- {r.get('cve')}: severity={r.get('severity')} KEV={kev}; summary={(r.get('summary') or '')[:220]}"
+        tool_context_lines.append(line)
+
+tool_context = "\n".join(tool_context_lines)
 
 # --- App ---
 app = FastAPI(title="AI Incident Assistant")
