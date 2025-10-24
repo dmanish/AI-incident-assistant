@@ -15,14 +15,10 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import jwt
-from typing import Optional
-from fastapi import Header, HTTPException
-from openai import OpenAI
-_openai_client = None
 
 # --- Env & Paths ---
 ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")  # no-op if not present; env vars from Compose will dominate
+load_dotenv(ROOT / ".env")
 
 CHROMA_DB_DIR = os.getenv("CHROMA_DB_DIR", str(ROOT / "data" / "chroma"))
 AUDIT_DIR = Path(os.getenv("AUDIT_DIR", str(ROOT / "data" / "logs")))
@@ -32,66 +28,9 @@ POLICY_PATH = ROOT / "data" / "policies" / "policies.yaml"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 JWT_SECRET = os.getenv("JWT_SECRET", "devsecret")
 JWT_EXP_SECS = int(os.getenv("JWT_EXP_SECS", "3600"))
-#--- Tool calls -------
-import re
-from typing import List, Dict, Any
-from app.tools.ioc import enrich_ip
-from app.tools.cve import find_cves, cve_lookup
-
-_IP_RE = re.compile(r"\b(?:(?:2(?:5[0-5]|[0-4]\d))|1?\d?\d)(?:\.(?:(?:2(?:5[0-5]|[0-4]\d))|1?\d?\d)){3}\b")
-WEB_TOOL_ROLES = {"security", "engineering"}
-
-Inside /chat handler (after you have user_msg, user_email, user_role):
-
-tool_calls: List[Dict[str, Any]] = []
-
-def rbac_allows_web_tools(role: str) -> bool:
-    return (role or "").lower() in WEB_TOOL_ROLES
-
-ips = _IP_RE.findall(user_msg or "")
-cves = find_cves(user_msg or "")
-
-if rbac_allows_web_tools(user_role) and ips:
-    for ip in ips[:3]:
-        try:
-            res = enrich_ip(ip)
-            tool_calls.append({"tool": "ioc_enrich", "ip": ip, "result": res})
-            audit({"action": "tool_call", "tool": "ioc_enrich", "user": user_email, "role": user_role, "ok": True, "ip": ip})
-        except Exception as e:
-            audit({"action": "tool_call", "tool": "ioc_enrich", "user": user_email, "role": user_role, "ok": False, "error": str(e)[:300], "ip": ip})
-
-if rbac_allows_web_tools(user_role) and cves:
-    for cve in cves[:3]:
-        try:
-            info = cve_lookup(cve)
-            tool_calls.append({"tool": "cve_lookup", "cve": cve, "result": info})
-            audit({"action": "tool_call", "tool": "cve_lookup", "user": user_email, "role": user_role, "ok": True, "cve": cve})
-        except Exception as e:
-            audit({"action": "tool_call", "tool": "cve_lookup", "user": user_email, "role": user_role, "ok": False, "error": str(e)[:300], "cve": cve})
-
-tool_context_lines = []
-for call in tool_calls:
-    if call["tool"] == "ioc_enrich":
-        r = call["result"]
-        line = f"- IP {r.get('ip')}: score={r.get('score')} country={r.get('country')} asn={r.get('asn')} tor={r.get('is_tor')} sources={','.join(r.get('sources', []))}"
-        tool_context_lines.append(line)
-    elif call["tool"] == "cve_lookup":
-        r = call["result"]
-        kev = "YES" if r.get("kev") else "no"
-        line = f"- {r.get('cve')}: severity={r.get('severity')} KEV={kev}; summary={(r.get('summary') or '')[:220]}"
-        tool_context_lines.append(line)
-
-tool_context = "\n".join(tool_context_lines)
 
 # --- App ---
 app = FastAPI(title="AI Incident Assistant")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
-)
-
-from fastapi.middleware.cors import CORSMiddleware
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],  # tighten later
@@ -100,8 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# --- Audit logger (rotates daily, keep 14 days) ---
+# --- Audit logger ---
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger("audit")
 logger.setLevel(logging.INFO)
@@ -114,43 +52,6 @@ logger.addHandler(handler)
 def audit(event: Dict[str, Any]):
     event = {**event, "ts": datetime.utcnow().isoformat(timespec="seconds")}
     logger.info(json.dumps(event, ensure_ascii=False))
-
-#----Helper -------
-def fallback_answer(user_msg: str, rag_context: str, tool_section: str) -> str:
-    """Offline fallback used when OpenAI is unavailable. Summarizes from context/tool results."""
-    # Very small heuristic for the demo:
-    msg = user_msg.lower()
-    if "phishing" in msg:
-        return (
-            "Here’s a safe, high-level phishing response:\n"
-            "1) Isolate the affected device from the network.\n"
-            "2) Notify the security team / manager.\n"
-            "3) Preserve the email (headers, links) and analyze in a sandbox.\n"
-            "4) Reset credentials and enforce MFA if not enabled.\n"
-            "5) Report the domain/sender and update mail gateway rules.\n"
-            "6) Review the incident and update training/policies.\n"
-            + ("\n\nContext used:\n" + rag_context[:600] if rag_context else "")
-        )
-    if "failed login" in msg or "login attempts" in msg:
-        # Try to extract a count from the tool section if available
-        import re
-        m = re.search(r"Found:\s+(\d+)\s+rows", tool_section or "")
-        count = m.group(1) if m else "some"
-        return (
-            f"I checked the authentication logs and found {count} failed login attempts for the period/filters you asked.\n"
-            "Recommended next steps:\n"
-            "• Correlate by IP, user, and time to detect patterns.\n"
-            "• GeoIP/ASN reputation check for offending IPs.\n"
-            "• Lock or step-up auth (MFA) on impacted accounts.\n"
-            "• Review recent password resets and notify the user(s).\n"
-            "• Add rules for repeated failures and alerting."
-        )
-    # Generic fallback
-    return (
-        "Here’s a concise answer based on what I can see locally.\n"
-        + (("\nContext used:\n" + rag_context[:600]) if rag_context else "")
-        + (("\n\nTool results summary:\n" + tool_section[:400]) if tool_section else "")
-    )
 
 # --- RBAC policy ---
 if POLICY_PATH.exists():
@@ -180,10 +81,7 @@ USERS = {
 
 # --- JWT helpers ---
 def create_jwt(email: str, role: str) -> str:
-    payload = {
-        "sub": email, "role": role,
-        "exp": datetime.utcnow() + timedelta(seconds=JWT_EXP_SECS)
-    }
+    payload = {"sub": email, "role": role, "exp": datetime.utcnow() + timedelta(seconds=JWT_EXP_SECS)}
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 def decode_jwt(token: str) -> Dict[str, Any]:
@@ -193,12 +91,10 @@ def decode_jwt(token: str) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 def require_user(authorization: Optional[str] = Header(None, alias="Authorization")) -> dict:
-    # Expect: Authorization: Bearer <token>
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing Authorization: Bearer <token>")
     token = authorization.split(" ", 1)[1]
-    user = decode_jwt(token)
-    return user
+    return decode_jwt(token)
 
 # --- Prompt-injection heuristics ---
 INJECTION_PATTERNS = [
@@ -209,27 +105,31 @@ INJECTION_PATTERNS = [
     r"open the (?:file|socket|port)",
 ]
 def is_injection(text: str) -> bool:
-    t = text.lower()
+    t = (text or "").lower()
     return any(re.search(p, t) for p in INJECTION_PATTERNS)
 
 # --- Chroma retrieval (vector RAG) ---
-# You already ingest via scripts/bootstrap.py & scripts/ingest.py
 import chromadb
 from chromadb import PersistentClient
+from rank_bm25 import BM25Okapi
+
 chroma_client = PersistentClient(path=CHROMA_DB_DIR)
-collection = None
 try:
     collection = chroma_client.get_collection("security_docs")
 except Exception:
-    # Not yet created (e.g., if OPENAI_API_KEY wasn't set during bootstrap)
     collection = None
 
+def _bm25_rerank(query: str, docs: List[str], top_k: int = 5) -> List[int]:
+    if not docs:
+        return []
+    tokens = [d.split() for d in docs]
+    bm25 = BM25Okapi(tokens)
+    scores = bm25.get_scores(query.split())
+    idxs = list(range(len(docs)))
+    idxs.sort(key=lambda i: scores[i] if scores and i < len(scores) else 0.0, reverse=True)
+    return idxs[:top_k]
+
 def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    """
-    Tolerant retrieval:
-    - If collection is missing or has no vectors/embedding, return [].
-    - Any Chroma errors are caught and logged; we continue without RAG.
-    """
     if collection is None:
         audit({"action": "retrieval_skip", "reason": "no_collection"})
         return []
@@ -237,72 +137,59 @@ def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any
         res = collection.query(
             query_texts=[query],
             n_results=20,
-            include=["documents", "metadatas", "distances", "embeddings"],  # embeddings just in case
+            include=["documents", "metadatas", "distances"],
         )
     except Exception as e:
         audit({"action": "retrieval_error", "error": str(e)})
         return []
 
-    if not res or not res.get("ids") or not res["ids"] or not res["ids"][0]:
+    if not res or not res.get("ids") or not res["ids"][0]:
         return []
 
-    out: List[Dict[str, Any]] = []
     docs0 = res.get("documents", [[]])[0] or []
     metas0 = res.get("metadatas", [[]])[0] or []
-    dists0 = (res.get("distances", [[]]) or [[]])[0] or []
+    # Filter by RBAC
+    filtered = [(d, m) for d, m in zip(docs0, metas0) if role_allows_doc(role, (m or {}).get("doc_type","kb"))]
+    if not filtered:
+        return []
 
-    for i in range(min(len(docs0), len(metas0))):
-        meta = metas0[i] or {}
-        doc_type = meta.get("doc_type", "kb")
-        if not role_allows_doc(role, doc_type):
-            continue
+    fd, fm = zip(*filtered)
+    # Light BM25 re-rank on the filtered docs
+    order = _bm25_rerank(query, list(fd), top_k=min(top_k, len(fd)))
+    out: List[Dict[str, Any]] = []
+    for i in order:
         out.append({
-            "text": docs0[i],
-            "metadata": meta,
-            "score": float(dists0[i]) if i < len(dists0) and dists0[i] is not None else None,
+            "text": fd[i],
+            "metadata": fm[i],
+            "score": None
         })
-
     return out[:top_k]
 
 # --- DuckDB log query tool ---
-from pathlib import Path
-con = duckdb.connect(DUCK_DB_PATH)
-
-# Ensure directory exists so glob doesn't fail later
 LOG_DIR = ROOT / "data" / "logs" / "auth"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-# Create an empty table so queries won't crash if no CSVs yet
-con.execute("""
+con_boot = duckdb.connect(DUCK_DB_PATH)
+con_boot.execute("""
     CREATE TABLE IF NOT EXISTS auth_logs (
-        timestamp TIMESTAMP,
-        user      VARCHAR,
-        action    VARCHAR,
-        result    VARCHAR,
-        ip        VARCHAR
+        timestamp TIMESTAMP, user VARCHAR, action VARCHAR, result VARCHAR, ip VARCHAR
     )
 """)
+con_boot.close()
 
 def query_failed_logins(date_iso: str, username: Optional[str] = None, limit: int = 200):
-    """
-    File-backed DuckDB, short-lived connection. Robust by filtering timestamp as text prefix.
-    """
     import pandas as pd
-    log_dir = ROOT / "data" / "logs" / "auth"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    files = list(log_dir.glob("*.csv"))
+    files = list(LOG_DIR.glob("*.csv"))
     if not files:
         return pd.DataFrame([])
-
     con = duckdb.connect(DUCK_DB_PATH, read_only=False)
     try:
         con.execute("PRAGMA threads=2;")
         con.execute("PRAGMA memory_limit='256MB';")
-
         user_clause = "AND lower(user) = lower(?)" if username else ""
         sql = f"""
             SELECT timestamp, user, action, result, ip
-            FROM read_csv_auto('{(log_dir / "*.csv").as_posix()}', union_by_name=true)
+            FROM read_csv_auto('{(LOG_DIR / "*.csv").as_posix()}', union_by_name=true)
             WHERE cast(timestamp as varchar) LIKE ?
               AND lower(result) = 'failed'
               {user_clause}
@@ -315,31 +202,9 @@ def query_failed_logins(date_iso: str, username: Optional[str] = None, limit: in
     finally:
         con.close()
 
-
-# --- OpenAI (chat) ---
 # --- OpenAI (chat) ---
 from openai import OpenAI
 _openai_client = None
-
-def get_openai_client():
-    global _openai_client
-    if _openai_client is not None:
-        return _openai_client
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    try:
-        _openai_client = OpenAI(api_key=api_key)
-        return _openai_client
-    except TypeError as e:
-        # Most common cause: httpx version mismatch
-        # Clear client so future calls can retry after you fix deps
-        _openai_client = None
-        raise RuntimeError(
-            f"OpenAI client init failed ({e}). Try: "
-            'pip install --upgrade "openai>=1.52.0" "httpx>=0.27.2,<0.28" "httpx-sse>=0.4.0"'
-        )
-
 def get_openai_client():
     global _openai_client
     if _openai_client is not None:
@@ -350,8 +215,39 @@ def get_openai_client():
     _openai_client = OpenAI(api_key=api_key)
     return _openai_client
 
+def fallback_answer(user_msg: str, rag_context: str, tool_section: str) -> str:
+    msg = (user_msg or "").lower()
+    if "phishing" in msg:
+        return (
+            "Here’s a safe, high-level phishing response:\n"
+            "1) Isolate the affected device from the network.\n"
+            "2) Notify the security team / manager.\n"
+            "3) Preserve the email (headers, links) and analyze in a sandbox.\n"
+            "4) Reset credentials and enforce MFA if not enabled.\n"
+            "5) Report the domain/sender and update mail gateway rules.\n"
+            "6) Review the incident and update training/policies.\n"
+            + ("\n\nContext used:\n" + rag_context[:600] if rag_context else "")
+        )
+    if "failed login" in msg or "login attempts" in msg:
+        import re as _re
+        m = _re.search(r"Found:\s+(\d+)\s+rows", tool_section or "")
+        count = m.group(1) if m else "some"
+        return (
+            f"I checked the authentication logs and found {count} failed login attempts for the period/filters you asked.\n"
+            "Recommended next steps:\n"
+            "• Correlate by IP, user, and time to detect patterns.\n"
+            "• GeoIP/ASN reputation check for offending IPs.\n"
+            "• Lock or step-up auth (MFA) on impacted accounts.\n"
+            "• Review recent password resets and notify the user(s).\n"
+            "• Add rules for repeated failures and alerting."
+        )
+    return (
+        "Here’s a concise answer based on what I can see locally.\n"
+        + (("\nContext used:\n" + rag_context[:600]) if rag_context else "")
+        + (("\n\nTool results summary:\n" + tool_section[:400]) if tool_section else "")
+    )
+
 def llm_answer(user_msg: str, rag_context: str, tool_section: str) -> str:
-    """Try OpenAI; on any error return an offline fallback."""
     client = get_openai_client()
     if not client:
         return fallback_answer(user_msg, rag_context, tool_section)
@@ -371,6 +267,9 @@ def llm_answer(user_msg: str, rag_context: str, tool_section: str) -> str:
     except Exception as e:
         audit({"action":"llm_fallback", "reason": str(e)})
         return fallback_answer(user_msg, rag_context, tool_section)
+
+# --- DLP post-LLM ---
+from app.security.dlp import mask_text
 
 # --- Schemas ---
 class LoginRequest(BaseModel):
@@ -400,65 +299,40 @@ def login(req: LoginRequest):
     audit({"action": "login_success", "email": req.email, "role": user["role"]})
     return {"token": token, "role": user["role"], "email": req.email}
 
+# ------------------ ORIGINAL /chat (kept) ------------------
 @app.post("/chat")
 def chat(req: ChatRequest, user=Depends(require_user)):
     role = user.get("role")
-
-    # ----- Prompt-injection guard -----
     if is_injection(req.message):
         audit({"action": "blocked_prompt_injection", "user": user["sub"], "role": role, "prompt": req.message})
         raise HTTPException(status_code=400, detail="Potential prompt injection detected and blocked.")
 
-    # ----- Agentic tool: log_query (RBAC + robust) -----
+    # Tool: logs (explicit ask)
     tool_section = ""
-    tool_calls = []
-    msg_low = req.message.lower()
-
+    tool_calls: List[Dict[str, Any]] = []
+    msg_low = (req.message or "").lower()
     if any(k in msg_low for k in ["failed login", "failed logins", "show logs", "login attempts"]):
         if not role_allows_tool(role, "log_query"):
             audit({"action": "unauthorized_tool_access", "user": user["sub"], "role": role, "tool": "log_query"})
             raise HTTPException(status_code=403, detail="Your role is not authorized to query logs.")
-
-        # default to today (UTC); naive username parse
         day = datetime.utcnow().date().isoformat()
         m = re.search(r"username\s+([a-z0-9_.-]+)", msg_low)
         username = m.group(1) if m else None
-
-        # robust query function (uses TIMESTAMP cast first, then string prefix)
         try:
             df = query_failed_logins(day, username=username)
-            sample = df.head(5).to_dict(orient="records")
             sample = df.head(5).to_dict(orient="records")
             tool_section = (
                 f"\n---\nTool: log_query\nDate: {day}\nUsername: {username}\n"
                 f"Found: {len(df)} rows\nSample: {json.dumps(sample, default=str)[:1000]}"
             )
-            tool_calls.append({
-                "tool": "log_query",
-                "date": day,
-                "username": username,
-                "result_count": int(len(df))
-            })
-            audit({
-                "action": "tool_call",
-                "user": user["sub"],
-                "role": role,
-                "tool": "log_query",
-                "filters": {"date": day, "username": username},
-                "result_count": int(len(df))
-            })
+            tool_calls.append({"tool": "log_query","date": day,"username": username,"result_count": int(len(df))})
+            audit({"action":"tool_call","user":user["sub"],"role":role,"tool":"log_query",
+                   "filters":{"date":day,"username":username},"result_count":int(len(df))})
         except Exception as e:
-            audit({
-                "action": "tool_error",
-                "user": user["sub"],
-                "role": role,
-                "tool": "log_query",
-                "error": str(e)
-            })
-            # Friendly 400 (client can show message) rather than 500
+            audit({"action":"tool_error","user":user["sub"],"role":role,"tool":"log_query","error":str(e)})
             raise HTTPException(status_code=400, detail="Log query failed")
 
-    # ----- Retrieval (RAG) — tolerant even if Chroma has no vectors -----
+    # RAG retrieval (tolerant)
     try:
         retrieved = retrieve_chunks(req.message, role=role, top_k=5)
     except Exception as e:
@@ -466,58 +340,95 @@ def chat(req: ChatRequest, user=Depends(require_user)):
         retrieved = []
 
     rag_context = ""
+    citations: List[str] = []
     for r in retrieved:
-        src = (r.get("metadata") or {}).get("source_path", "unknown")
+        meta = (r.get("metadata") or {})
+        src = meta.get("source_path", "unknown")
+        citations.append(src)
         rag_context += f"\n---\nSource: {src}\n{(r.get('text') or '')[:1000]}"
 
-    # ----- LLM call with graceful offline fallback -----
-    audit({
-        "action": "llm_invoke",
-        "user": user["sub"],
-        "role": role,
-        "prompt_excerpt": (req.message + rag_context + tool_section)[:400]
-    })
+    audit({"action": "llm_invoke","user": user["sub"],"role": role,"prompt_excerpt": (req.message + rag_context + tool_section)[:400]})
+    answer = llm_answer(req.message, rag_context, tool_section)
 
-    answer = llm_answer(req.message, rag_context, tool_section)  # tries OpenAI, falls back locally
+    # --- DLP masking (post-LLM) ---
+    masked, dlp_counts = mask_text(answer, role=role)
+    audit({"action":"llm_result","user":user["sub"],"role":role,"result_excerpt": masked[:400], "dlp_counts": dlp_counts})
 
-    # Minimal DLP: redact long secret-y tokens
-    answer = re.sub(r"[A-Za-z0-9_\-]{24,}", "[REDACTED]", answer)
+    return {"reply": masked, "retrieved": retrieved, "citations": citations, "tool_calls": tool_calls, "dlp_counts": dlp_counts}
 
-    audit({
-        "action": "llm_result",
-        "user": user["sub"],
-        "role": role,
-        "result_excerpt": answer[:400]
-    })
+# ------------------ NEW: /agent/chat ------------------
+from app.agent.agent import decide_tools, synthesize_answer
 
-    return {"reply": answer, "retrieved": retrieved, "tool_calls": tool_calls}
+class AgentChatRequest(BaseModel):
+    message: str
+    convo_id: Optional[str] = None
 
-    # (Optional) simple DLP mask for long tokens that look like secrets
-    answer = re.sub(r"[A-Za-z0-9_\-]{24,}", "[REDACTED]", answer)
-
-    audit({"action":"llm_result","user":user["sub"],"role":role,"result_excerpt":answer[:400]})
-    return {"reply": answer, "retrieved": retrieved, "tool_calls": tool_calls}
-
-class LogsQuery(BaseModel):
-    date: Optional[str] = None  # "YYYY-MM-DD" (defaults to UTC today)
-    username: Optional[str] = None
-    limit: int = 200
-
-@app.post("/logs/query")
-def logs_query(req: LogsQuery, user=Depends(require_user)):
+@app.post("/agent/chat")
+def agent_chat(req: AgentChatRequest, user=Depends(require_user)):
     role = user.get("role")
-    if not role_allows_tool(role, "log_query"):
-        raise HTTPException(status_code=403, detail="Your role is not authorized to query logs.")
-    day = req.date or datetime.utcnow().date().isoformat()
-    try:
-        df = query_failed_logins(day, username=req.username, limit=req.limit)
-        return {
-            "date": day,
-            "username": req.username,
-            "result_count": int(len(df)),
-            "rows": json.loads(df.to_json(orient="records", date_format="iso"))
-        }
-    except Exception as e:
-        audit({"action": "tool_error", "tool": "log_query", "error": str(e)})
-        raise HTTPException(status_code=400, detail="Log query failed")
+    if is_injection(req.message):
+        audit({"action": "blocked_prompt_injection", "user": user["sub"], "role": role, "prompt": req.message})
+        raise HTTPException(status_code=400, detail="Potential prompt injection detected and blocked.")
+
+    route = decide_tools(req.message)
+    use_rag = bool(route.get("use_rag"))
+    use_logs = bool(route.get("use_logs"))
+    audit({"action":"agent_decision","user":user["sub"],"role":role,"decision":{"rag":use_rag,"logs":use_logs,"reason":route.get("reason")}})
+
+    retrieved: List[Dict[str,Any]] = []
+    citations: List[str] = []
+    rag_context = ""
+    tool_calls: List[Dict[str,Any]] = []
+
+    if use_rag:
+        try:
+            retrieved = retrieve_chunks(req.message, role=role, top_k=5)
+            for r in retrieved:
+                meta = (r.get("metadata") or {})
+                citations.append(meta.get("source_path","unknown"))
+            # Compact context
+            for r in retrieved:
+                src = (r.get("metadata") or {}).get("source_path","unknown")
+                rag_context += f"\n---\nSource: {src}\n{(r.get('text') or '')[:800]}"
+            audit({"action":"tool_call","tool":"knowledge_base_search","user":user["sub"],"role":role,"result_count":len(retrieved)})
+        except Exception as e:
+            audit({"action":"tool_error","tool":"knowledge_base_search","user":user["sub"],"role":role,"error":str(e)})
+
+    logs_context = ""
+    if use_logs:
+        if not role_allows_tool(role, "log_query"):
+            audit({"action":"unauthorized_tool_access","tool":"log_query","user":user["sub"],"role":role})
+        else:
+            # parse a naive date/username
+            day = datetime.utcnow().date().isoformat()
+            m = re.search(r"username\s+([a-z0-9_.-]+)", (req.message or "").lower())
+            username = m.group(1) if m else None
+            try:
+                df = query_failed_logins(day, username=username)
+                sample = df.head(8).to_dict(orient="records")
+                logs_context = (
+                    f"\n---\nTool: log_query\nDate: {day}\nUsername: {username}\n"
+                    f"Found: {len(df)} rows\nSample: {json.dumps(sample, default=str)[:1200]}"
+                )
+                tool_calls.append({"tool":"log_query","date":day,"username":username,"result_count":int(len(df))})
+                audit({"action":"tool_call","tool":"log_query","user":user["sub"],"role":role,
+                       "filters":{"date":day,"username":username},"result_count":int(len(df))})
+            except Exception as e:
+                audit({"action":"tool_error","tool":"log_query","user":user["sub"],"role":role,"error":str(e)})
+
+    # Ask LLM to synthesize (policy + logs). Falls back locally if needed.
+    answer = synthesize_answer(req.message, rag_context=rag_context, logs_context=logs_context)
+
+    # --- DLP masking (post-LLM) ---
+    masked, dlp_counts = mask_text(answer, role=role)
+    audit({"action":"llm_result","user":user["sub"],"role":role,"result_excerpt":masked[:400], "dlp_counts": dlp_counts})
+
+    return {
+        "reply": masked,
+        "citations": citations,       # list of source paths for UI
+        "retrieved": retrieved,       # chunks (already filtered by RBAC)
+        "tool_calls": tool_calls,     # logs tool summaries
+        "agent_decision": {"rag":use_rag,"logs":use_logs,"reason":route.get("reason")},
+        "dlp_counts": dlp_counts
+    }
 
