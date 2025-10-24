@@ -1,4 +1,4 @@
-i# app/agent/agent.py
+# app/agent/agent.py
 """
 Minimal Agent:
 - decide_tools(user_msg) : uses OpenAI (if available) to choose {rag, logs, both}, else heuristic fallback

@@ -15,6 +15,7 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import jwt
+from app.agent.agent import decide_tools, synthesize_answer
 
 # --- Env & Paths ---
 ROOT = Path(__file__).resolve().parent.parent
@@ -357,7 +358,6 @@ def chat(req: ChatRequest, user=Depends(require_user)):
     return {"reply": masked, "retrieved": retrieved, "citations": citations, "tool_calls": tool_calls, "dlp_counts": dlp_counts}
 
 # ------------------ NEW: /agent/chat ------------------
-from app.agent.agent import decide_tools, synthesize_answer
 
 class AgentChatRequest(BaseModel):
     message: str

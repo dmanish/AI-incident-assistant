@@ -15,19 +15,16 @@ export async function login(email: string, password: string) {
 }
 
 export async function chat(token: string, message: string) {
-  const r = await fetch(`${BASE}/chat`, {
+  const r = await fetch(`/api/agent/chat`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ message }),
-  });
-  if (!r.ok) {
-    const text = await r.text().catch(() => '');
-    throw new Error(`Chat failed: ${r.status} ${text}`);
-  }
-  return r.json() as Promise<ChatResponse>;
+    body: JSON.stringify({ message })
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return await r.json()  // { reply, citations, retrieved, tool_calls, agent_decision, dlp_counts }
 }
 
 export async function health(): Promise<boolean> {
