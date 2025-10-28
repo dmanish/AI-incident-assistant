@@ -1,3 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.sqlite
+venv/
+
+# Environment
+.env
+
+# Data
+data/chroma/
+data/logs/*.duckdb
+
 # Logs
 logs
 *.log
@@ -22,3 +36,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Project specific
+PROBLEM.md

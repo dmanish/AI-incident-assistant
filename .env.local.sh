@@ -40,7 +40,7 @@ export OPENAI_API_KEY=""
 export EMBEDDING_BACKEND="cpu"
 
 # -------------------------
-# Frontend / Streamlit
+# Frontend / React UI
 # -------------------------
 
 # The backend API base URL (FastAPI service)
@@ -48,8 +48,8 @@ export EMBEDDING_BACKEND="cpu"
 # Example for local: "http://127.0.0.1:8080"
 export BACKEND_URL="http://127.0.0.1:8080"
 
-# Optional: default Streamlit port
-export STREAMLIT_SERVER_PORT=8501
+# Frontend environment variable for Vite
+export VITE_BACKEND_URL="http://127.0.0.1:8080"
 
 # =============================================================================
 echo "Environment variables loaded successfully."

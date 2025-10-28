@@ -1,0 +1,23 @@
+# Ensure shell scripts always use LF line endings
+*.sh text eol=lf
+Makefile text eol=lf
+
+# Python files use LF
+*.py text eol=lf
+
+# Standard text files
+*.md text
+*.json text
+*.yml text
+*.yaml text
+*.txt text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.db binary
+*.sqlite binary
+*.duckdb binary

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { health } from './api'
+import { healthz } from './api'
 import type { Session } from './types'
 import LoginPanel from './components/LoginPanel'
 import ChatPane from './components/ChatPane'
@@ -9,7 +9,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null)
 
   useEffect(() => {
-    health().then(setIsHealthy).catch(() => setIsHealthy(false))
+    healthz().then(setIsHealthy).catch(() => setIsHealthy(false))
   }, [])
 
   return (

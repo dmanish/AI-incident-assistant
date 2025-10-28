@@ -2,60 +2,104 @@
 
 An intelligent assistant that automates **incident response reasoning**, **log analysis**, and **policy lookup** — combining **RAG**, **agentic tool use**, and **data-loss prevention**.
 
+> 📖 **New here?** See [QUICKSTART.md](QUICKSTART.md) for the fastest way to get started!
+
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start - One Command Setup
 
-You can run this project in two ways:
+This project is designed to run with **ONE COMMAND** in both environments:
 
-### **Option 1 — Run in GitHub Codespaces (Recommended for Demo)**
+### ⚡ GitHub Codespaces
+```bash
+./start-codespaces.sh
+```
 
-This is the easiest and fastest setup.
+### 🐳 Docker (Local Laptop)
+```bash
+./start-docker.sh
+```
 
-#### Steps:
+Both scripts will:
+- ✅ Create `.env` from `.env.example` if needed
+- ✅ Install/build dependencies automatically
+- ✅ Bootstrap sample data
+- ✅ Start backend API (port 8080)
+- ✅ Start React UI (port 3000)
+
+---
+
+## 📋 Detailed Setup Instructions
+
+### ✅ Option 1 — Run Directly in GitHub Codespaces
+
+**One Command:**
+```bash
+./start-codespaces.sh
+```
+
+This script will:
+1. Create `.env` from template (if needed)
+2. Install Python and Node dependencies
+3. Bootstrap and ingest sample security data
+4. Start the backend API on port 8080
+5. Start the React UI on port 3000
+
+#### URLs (within Codespaces)
+
+- **API Backend** → `https://<your-codespace-id>-8080.app.github.dev/healthz`
+- **React UI** → `https://<your-codespace-id>-3000.app.github.dev/`
+
+💡 *If the backend port is marked "Private", make it "Public" in the Codespaces Ports tab to allow the UI to access it.*
+
+#### Manual Setup (if preferred)
 
 ```bash
-# 1. Install dependencies
+# 1. Install Python dependencies
 pip install -r requirements.txt
 
-# 2. Seed local data (docs, logs, embeddings)
+# 2. Install Node dependencies
+cd frontend && npm install && cd ..
+
+# 3. Bootstrap and ingest sample data
 python scripts/bootstrap.py
 
-# 3. Start the FastAPI backend
-python app/main.py
-```
+# 4. Start the backend
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 
-Visit:  
-👉 **http://127.0.0.1:8080** → API  
-👉 **http://127.0.0.1:8501** → Streamlit UI
+# 5. In a new terminal, start the React UI
+cd frontend
+VITE_BACKEND_URL=http://localhost:8080 npm run dev
+```
 
 ---
 
-### **Option 2 — Run Locally with Docker (Production-Style)**
+### 🐳 Option 2 — Run Locally with Docker Compose
 
-This setup simulates a real microservice deployment with separate containers for:
-- Backend API (FastAPI)
-- UI (Streamlit or React)
-- Agent tools
-
-#### Steps:
-
+**One Command:**
 ```bash
-# 1. Build and run containers
-docker compose -f docker/docker-compose.yml up --build
-
-# 2. Check health
-curl http://localhost:8080/healthz
-
-# 3. Open in browser
-http://localhost:8080  → Backend API
-http://localhost:8501  → Streamlit UI
-http://localhost:3000  → React Agent UI (if enabled)
+./start-docker.sh
 ```
+
+This script runs:
+```bash
+docker compose -f docker/docker-compose.yml up --build
+```
+
+This will:
+- Build images using the Dockerfile in `docker/`
+- Run the backend (`ai-incident-api`) on port **8080**
+- Run the frontend (`ai-incident-web`) on port **3000**
+- Run bootstrap + ingestion automatically inside the API container
+
+#### Access the apps
+
+- **Backend API health** → [http://localhost:8080/healthz](http://localhost:8080/healthz)
+- **React UI** → [http://localhost:3000](http://localhost:3000)
 
 #### To stop and clean up:
 ```bash
-docker compose down -v
+docker compose -f docker/docker-compose.yml down
 ```
 
 ---
@@ -111,7 +155,7 @@ Make sure to **`source .env.local.sh`** before starting the app.
 | **Backend** | FastAPI (Python 3.11) | Main API, RAG retrieval, LLM orchestration, and tools |
 | **Vector Store** | Chroma | Embedding + semantic search over security policies and playbooks |
 | **LLM** | OpenAI API or Local | Generates summaries, reasoning, and answers |
-| **Frontend** | React / Streamlit | Provides chat UI, visualization of retrieved docs & tool calls |
+| **Frontend** | React + TypeScript + Vite | Provides chat UI, visualization of retrieved docs & tool calls |
 | **Database** | DuckDB | Used for log query simulation |
 | **DLP Layer** | Regex + entropy + keyword list | Masks sensitive data before responses |
 

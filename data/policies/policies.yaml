@@ -1,0 +1,10 @@
+roles:
+  security:
+    allow_tools: [log_query]
+    allow_docs: [policy, playbook, kb]
+  engineering:
+    allow_tools: [log_query]
+    allow_docs: [policy, playbook, kb]
+  sales:
+    allow_tools: []
+    allow_docs: [kb]
