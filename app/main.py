@@ -485,16 +485,15 @@ def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
     # Load conversation history if exists
     conversation_history = memory.get_conversation(convo_id)
 
-    # Get agent
+    # Try to get function calling agent, fall back to heuristic if unavailable
     try:
         agent = get_fc_agent()
-    except ValueError as e:
-        # OpenAI not configured
-        audit({"action": "agent_init_failed", "error": str(e), "user": user_email, "role": role})
-        raise HTTPException(
-            status_code=503,
-            detail="Agent requires OpenAI API key. Please configure OPENAI_API_KEY."
-        )
+        use_function_calling = True
+    except (ValueError, Exception) as e:
+        # OpenAI not configured or quota exceeded - fall back to heuristic approach
+        audit({"action": "agent_fallback_to_heuristic", "reason": str(e)[:200], "user": user_email, "role": role})
+        agent = None
+        use_function_calling = False
 
     # Audit callback
     def audit_callback(event: Dict[str, Any]):
@@ -503,24 +502,69 @@ def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
     # Run agent
     audit({"action": "agent_start", "user": user_email, "role": role, "query": req.message[:200], "convo_id": convo_id})
 
-    try:
-        result = agent.run(
-            user_message=req.message,
-            role=role,
-            conversation_history=conversation_history,
-            audit_callback=audit_callback
-        )
-    except Exception as e:
-        audit({"action": "agent_error", "user": user_email, "role": role, "error": str(e), "convo_id": convo_id})
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+    if use_function_calling:
+        # Use OpenAI function calling agent
+        try:
+            result = agent.run(
+                user_message=req.message,
+                role=role,
+                conversation_history=conversation_history,
+                audit_callback=audit_callback
+            )
+        except Exception as e:
+            audit({"action": "agent_error", "user": user_email, "role": role, "error": str(e), "convo_id": convo_id})
+            raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+    else:
+        # Fall back to heuristic-based approach (no OpenAI required)
+        # Use the same logic as /agent/chat but return v2 response format
+        decision = decide_tools(req.message)
+        audit({"action": "agent_decision", "user": user_email, "role": role, "decision": decision})
 
-    # Save conversation history
-    memory.save_conversation(
-        convo_id=convo_id,
-        messages=result["messages"],
-        user_email=user_email,
-        role=role
-    )
+        # Execute tools based on decision
+        rag_context = ""
+        logs_context = ""
+        tool_calls_made = []
+
+        if decision["use_rag"]:
+            chunks = retrieve_chunks(req.message, role=role, top_k=5)
+            if chunks:
+                rag_context = "\n\n".join([f"---\nSource: {c['metadata'].get('source_path','')}\n{c['text']}" for c in chunks])
+                tool_calls_made.append({"tool": "knowledge_base_search", "result_count": len(chunks)})
+
+        if decision["use_logs"]:
+            from datetime import datetime
+            today = datetime.utcnow().date().isoformat()
+            log_result = query_failed_logins(today, username=None)
+            if log_result:
+                logs_context = f"---\nTool: log_query\nDate: {today}\nUsername: None\nFound: {len(log_result)} rows\nSample: {log_result[:2]}"
+                tool_calls_made.append({"tool": "log_query", "result_count": len(log_result)})
+
+        # Synthesize answer
+        final_answer = synthesize_answer(req.message, rag_context, logs_context)
+
+        # Format as v2 response (without full reasoning transparency)
+        result = {
+            "answer": final_answer,
+            "tool_calls": tool_calls_made,
+            "iterations": 1,
+            "messages": [],
+            "reasoning_steps": [],  # Empty for heuristic mode
+            "routes_used": {
+                "llm_calls": 1 if rag_context or logs_context else 0,
+                "rag_searches": 1 if decision["use_rag"] and rag_context else 0,
+                "log_queries": 1 if decision["use_logs"] and logs_context else 0,
+                "tools_used": [tc["tool"] for tc in tool_calls_made]
+            }
+        }
+
+    # Save conversation history (only for function calling mode with full history)
+    if use_function_calling and result.get("messages"):
+        memory.save_conversation(
+            convo_id=convo_id,
+            messages=result["messages"],
+            user_email=user_email,
+            role=role
+        )
 
     # Apply DLP masking to final answer
     masked_answer, dlp_counts = mask_text(result["answer"], role=role)
@@ -541,14 +585,14 @@ def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
         "convo_id": convo_id,
         "tool_calls": result["tool_calls"],
         "iterations": result["iterations"],
-        "agent_type": "function_calling",
+        "agent_type": "function_calling" if use_function_calling else "heuristic_fallback",
         "dlp_counts": dlp_counts,
         "max_iterations_reached": result.get("max_iterations_reached", False),
         # New: reasoning transparency fields
         "reasoning_steps": result.get("reasoning_steps", []),
         "routes_used": result.get("routes_used", {}),
         "metadata": {
-            "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini") if use_function_calling else "heuristic",
             "total_llm_calls": result.get("routes_used", {}).get("llm_calls", 0),
             "used_rag": result.get("routes_used", {}).get("rag_searches", 0) > 0,
             "used_logs": result.get("routes_used", {}).get("log_queries", 0) > 0,
