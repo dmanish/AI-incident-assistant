@@ -511,10 +511,20 @@ def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
                 conversation_history=conversation_history,
                 audit_callback=audit_callback
             )
+            # Check if the result indicates an LLM error (quota exceeded, etc.)
+            if result.get("error") or "Error calling LLM" in result.get("answer", ""):
+                # Fall back to heuristics
+                audit({"action": "agent_runtime_fallback", "reason": "LLM error during execution", "user": user_email, "role": role})
+                use_function_calling = False
+                # Will execute heuristic logic below
+            else:
+                # Success with function calling
+                pass
         except Exception as e:
-            audit({"action": "agent_error", "user": user_email, "role": role, "error": str(e), "convo_id": convo_id})
-            raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
-    else:
+            audit({"action": "agent_runtime_error", "error": str(e)[:200], "user": user_email, "role": role})
+            # Fall back to heuristics on any error
+            use_function_calling = False
+    if not use_function_calling:
         # Fall back to heuristic-based approach (no OpenAI required)
         # Use the same logic as /agent/chat but return v2 response format
         decision = decide_tools(req.message)
