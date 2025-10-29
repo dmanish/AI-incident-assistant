@@ -51,12 +51,22 @@ cd frontend
 # Detect Codespaces and construct the correct backend URL
 if [ -n "$CODESPACE_NAME" ]; then
     # In Codespaces, use the public forwarded URL
-    export VITE_BACKEND_URL="https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
-    echo "🌐 Detected Codespaces - Backend URL: $VITE_BACKEND_URL"
+    BACKEND_URL="https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    echo "🌐 Detected Codespaces - Backend URL: $BACKEND_URL"
+
+    # Update frontend/.env file for Vite to pick up
+    echo "# Frontend reads this at build-time (Vite requires VITE_ prefix)" > .env
+    echo "VITE_BACKEND_URL=$BACKEND_URL" >> .env
+    echo "" >> .env
 else
     # Local dev or Docker - use localhost
-    export VITE_BACKEND_URL=http://localhost:8080
-    echo "🖥️  Local mode - Backend URL: $VITE_BACKEND_URL"
+    BACKEND_URL="http://localhost:8080"
+    echo "🖥️  Local mode - Backend URL: $BACKEND_URL"
+
+    # Ensure frontend/.env has localhost
+    echo "# Frontend reads this at build-time (Vite requires VITE_ prefix)" > .env
+    echo "VITE_BACKEND_URL=$BACKEND_URL" >> .env
+    echo "" >> .env
 fi
 
 npm run dev
