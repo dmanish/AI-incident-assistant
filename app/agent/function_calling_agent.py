@@ -1,20 +1,21 @@
 # app/agent/function_calling_agent.py
 """
-True agentic system using OpenAI Function Calling API
+True agentic system using LLM function calling APIs
 Supports iterative reasoning and multi-turn tool execution
 """
 
 import os
 import json
-from typing import Dict, Any, List, Optional, Tuple, Callable
-from openai import OpenAI
+from typing import Dict, Any, List, Optional, Tuple, Callable, Literal
 from .tools import TOOL_DEFINITIONS, format_tool_result
+
+LLMProvider = Literal["openai", "anthropic", "google"]
 
 
 class FunctionCallingAgent:
     """
-    Agent that uses OpenAI's function calling to make decisions
-    and execute tools iteratively
+    Agent that uses LLM function calling to make decisions
+    and execute tools iteratively. Tries OpenAI, Anthropic, then Google.
     """
 
     def __init__(
@@ -27,20 +28,60 @@ class FunctionCallingAgent:
         """
         Args:
             tool_executors: Dict mapping tool names to execution functions
-            model: OpenAI model to use (default: from env or gpt-4o-mini)
+            model: Model to use (default: from env)
             max_iterations: Maximum number of agent loop iterations
             temperature: LLM temperature for responses
         """
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.max_iterations = max_iterations
         self.temperature = temperature
         self.tool_executors = tool_executors
 
-        # Initialize OpenAI client
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not set - function calling agent requires OpenAI")
-        self.client = OpenAI(api_key=api_key)
+        # Try to initialize with available provider
+        self.client, self.provider = self._init_client()
+
+        # Set model based on provider
+        if model:
+            self.model = model
+        elif self.provider == "openai":
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        elif self.provider == "anthropic":
+            self.model = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
+        elif self.provider == "google":
+            self.model = os.getenv("GOOGLE_MODEL", "gemini-1.5-flash")
+        else:
+            self.model = "gpt-4o-mini"
+
+    def _init_client(self) -> Tuple[Any, LLMProvider]:
+        """Initialize LLM client. Try OpenAI, then Anthropic, then Google."""
+        # Try OpenAI
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                from openai import OpenAI
+                return (OpenAI(api_key=openai_key), "openai")
+            except Exception:
+                pass
+
+        # Try Anthropic
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if anthropic_key:
+            try:
+                import anthropic
+                return (anthropic.Anthropic(api_key=anthropic_key), "anthropic")
+            except Exception:
+                pass
+
+        # Try Google
+        google_key = os.getenv("GOOGLE_API_KEY")
+        if google_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=google_key)
+                return (genai, "google")
+            except Exception:
+                pass
+
+        raise ValueError("No LLM API key found. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_API_KEY")
 
     def run(
         self,
@@ -106,14 +147,21 @@ class FunctionCallingAgent:
             routes_used["llm_calls"] += 1
 
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    tools=TOOL_DEFINITIONS,
-                    tool_choice="auto",  # Let model decide
-                    temperature=self.temperature,
-                    max_tokens=1000
-                )
+                if self.provider == "openai":
+                    response = self._call_openai(messages)
+                    assistant_content = response.choices[0].message.content
+                    tool_calls = response.choices[0].message.tool_calls
+                elif self.provider == "anthropic":
+                    response = self._call_anthropic(messages)
+                    assistant_content = next((c.text for c in response.content if hasattr(c, 'text')), None)
+                    tool_calls = [c for c in response.content if hasattr(c, 'name')]
+                elif self.provider == "google":
+                    response = self._call_google(messages)
+                    assistant_content = response.text if hasattr(response, 'text') else None
+                    tool_calls = response.candidates[0].content.parts if hasattr(response.candidates[0].content, 'parts') else []
+                    tool_calls = [p for p in tool_calls if hasattr(p, 'function_call')]
+                else:
+                    raise ValueError(f"Unsupported provider: {self.provider}")
             except Exception as e:
                 if audit_callback:
                     audit_callback({
@@ -129,35 +177,26 @@ class FunctionCallingAgent:
                     "error": True
                 }
 
-            assistant_message = response.choices[0].message
+            # Normalize tool calls to common format
+            normalized_tool_calls = self._normalize_tool_calls(tool_calls)
 
             # Add assistant's response to message history
             messages.append({
                 "role": "assistant",
-                "content": assistant_message.content,
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": tc.type,
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments
-                        }
-                    }
-                    for tc in (assistant_message.tool_calls or [])
-                ]
+                "content": assistant_content,
+                "tool_calls": normalized_tool_calls
             })
 
             # Check if we have a final answer (no tool calls)
-            if not assistant_message.tool_calls:
-                final_answer = assistant_message.content or "I don't have enough information to answer."
+            if not normalized_tool_calls:
+                final_answer = assistant_content or "I don't have enough information to answer."
 
                 # Add final reasoning step
                 reasoning_steps.append({
                     "step": iterations,
                     "type": "final_answer",
                     "description": "Agent synthesized final answer",
-                    "llm_reasoning": assistant_message.content[:200] if assistant_message.content else None
+                    "llm_reasoning": assistant_content[:200] if assistant_content else None
                 })
 
                 if audit_callback:
@@ -178,18 +217,18 @@ class FunctionCallingAgent:
                 }
 
             # Execute tool calls
-            for tool_call in assistant_message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args_raw = tool_call.function.arguments
+            for tool_call in normalized_tool_calls:
+                tool_name = tool_call["function"]["name"]
+                tool_args_raw = tool_call["function"]["arguments"]
 
                 # Parse arguments
                 try:
-                    tool_args = json.loads(tool_args_raw)
+                    tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
                 except json.JSONDecodeError as e:
                     error_msg = f"Failed to parse tool arguments: {str(e)}"
                     messages.append({
                         "role": "tool",
-                        "tool_call_id": tool_call.id,
+                        "tool_call_id": tool_call["id"],
                         "content": error_msg
                     })
                     continue
@@ -230,7 +269,7 @@ class FunctionCallingAgent:
                 # Add tool result to messages
                 messages.append({
                     "role": "tool",
-                    "tool_call_id": tool_call.id,
+                    "tool_call_id": tool_call["id"],
                     "content": result_str
                 })
 
@@ -335,6 +374,117 @@ class FunctionCallingAgent:
                 "success": False,
                 "result": f"Error executing tool: {str(e)}"
             }
+
+    def _call_openai(self, messages: List[Dict]) -> Any:
+        """Call OpenAI API with function calling"""
+        return self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            tools=TOOL_DEFINITIONS,
+            tool_choice="auto",
+            temperature=self.temperature,
+            max_tokens=1000
+        )
+
+    def _call_anthropic(self, messages: List[Dict]) -> Any:
+        """Call Anthropic API with tool use"""
+        # Convert tools to Anthropic format
+        tools = []
+        for tool in TOOL_DEFINITIONS:
+            tools.append({
+                "name": tool["function"]["name"],
+                "description": tool["function"]["description"],
+                "input_schema": tool["function"]["parameters"]
+            })
+
+        # Extract system message
+        system = next((m["content"] for m in messages if m["role"] == "system"), "")
+        user_messages = [m for m in messages if m["role"] != "system"]
+
+        return self.client.messages.create(
+            model=self.model,
+            max_tokens=1000,
+            system=system,
+            messages=user_messages,
+            tools=tools,
+            temperature=self.temperature
+        )
+
+    def _call_google(self, messages: List[Dict]) -> Any:
+        """Call Google Gemini API with function calling"""
+        # Convert tools to Google format
+        from google.ai.generativelanguage_v1beta.types import FunctionDeclaration, Tool
+
+        tools_list = []
+        for tool in TOOL_DEFINITIONS:
+            tools_list.append(
+                FunctionDeclaration(
+                    name=tool["function"]["name"],
+                    description=tool["function"]["description"],
+                    parameters=tool["function"]["parameters"]
+                )
+            )
+
+        # Create model with tools
+        model = self.client.GenerativeModel(
+            model_name=self.model,
+            tools=[Tool(function_declarations=tools_list)]
+        )
+
+        # Combine messages into prompt
+        prompt_parts = []
+        for msg in messages:
+            if msg["role"] == "user":
+                prompt_parts.append(f"User: {msg['content']}")
+            elif msg["role"] == "assistant":
+                prompt_parts.append(f"Assistant: {msg['content']}")
+            elif msg["role"] == "system":
+                prompt_parts.insert(0, f"System: {msg['content']}")
+
+        return model.generate_content("\n\n".join(prompt_parts))
+
+    def _normalize_tool_calls(self, tool_calls: Any) -> List[Dict]:
+        """Normalize tool calls from different providers to common format"""
+        if not tool_calls:
+            return []
+
+        normalized = []
+
+        if self.provider == "openai":
+            for tc in tool_calls:
+                normalized.append({
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments
+                    }
+                })
+        elif self.provider == "anthropic":
+            for i, tc in enumerate(tool_calls):
+                if hasattr(tc, 'name'):
+                    normalized.append({
+                        "id": f"tool_{i}",
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.input) if hasattr(tc, 'input') else "{}"
+                        }
+                    })
+        elif self.provider == "google":
+            for i, part in enumerate(tool_calls):
+                if hasattr(part, 'function_call'):
+                    fc = part.function_call
+                    normalized.append({
+                        "id": f"tool_{i}",
+                        "type": "function",
+                        "function": {
+                            "name": fc.name,
+                            "arguments": json.dumps(dict(fc.args)) if hasattr(fc, 'args') else "{}"
+                        }
+                    })
+
+        return normalized
 
     def _get_tool_description(self, tool_name: str) -> str:
         """Get human-readable description of what a tool does"""
