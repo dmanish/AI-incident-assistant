@@ -16,6 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import jwt
 from app.agent.agent import decide_tools, synthesize_answer
+from app.agent.function_calling_agent import create_agent
+from app.agent.executors import create_tool_executors
+from app.agent.memory import get_memory
+import uuid
 
 # --- Env & Paths ---
 ROOT = Path(__file__).resolve().parent.parent
@@ -115,10 +119,13 @@ from chromadb import PersistentClient
 from rank_bm25 import BM25Okapi
 
 chroma_client = PersistentClient(path=CHROMA_DB_DIR)
-try:
-    collection = chroma_client.get_collection("security_docs")
-except Exception:
-    collection = None
+
+def _get_collection():
+    """Lazy-load collection to handle background reindexing"""
+    try:
+        return chroma_client.get_collection("security_docs")
+    except Exception as e:
+        return None
 
 def _bm25_rerank(query: str, docs: List[str], top_k: int = 5) -> List[int]:
     if not docs:
@@ -127,10 +134,11 @@ def _bm25_rerank(query: str, docs: List[str], top_k: int = 5) -> List[int]:
     bm25 = BM25Okapi(tokens)
     scores = bm25.get_scores(query.split())
     idxs = list(range(len(docs)))
-    idxs.sort(key=lambda i: scores[i] if scores and i < len(scores) else 0.0, reverse=True)
+    idxs.sort(key=lambda i: scores[i] if len(scores) > 0 and i < len(scores) else 0.0, reverse=True)
     return idxs[:top_k]
 
 def retrieve_chunks(query: str, role: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    collection = _get_collection()
     if collection is None:
         audit({"action": "retrieval_skip", "reason": "no_collection"})
         return []
@@ -431,4 +439,126 @@ def agent_chat(req: AgentChatRequest, user=Depends(require_user)):
         "agent_decision": {"rag":use_rag,"logs":use_logs,"reason":route.get("reason")},
         "dlp_counts": dlp_counts
     }
+
+# ------------------ NEW: /agent/chat/v2 (Function Calling Agent) ------------------
+
+# Initialize function calling agent (lazy init on first use)
+_fc_agent = None
+
+def get_fc_agent():
+    """Get or create function calling agent"""
+    global _fc_agent
+    if _fc_agent is None:
+        # Create tool executors
+        tool_executors = create_tool_executors(
+            retrieve_chunks_fn=retrieve_chunks,
+            query_failed_logins_fn=query_failed_logins,
+            role_allows_tool_fn=role_allows_tool,
+            role_allows_doc_fn=role_allows_doc
+        )
+        # Create agent
+        _fc_agent = create_agent(tool_executors)
+    return _fc_agent
+
+class FunctionCallingChatRequest(BaseModel):
+    message: str
+    convo_id: Optional[str] = None
+
+@app.post("/agent/chat/v2")
+def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
+    """
+    True agentic chat endpoint using OpenAI function calling
+    Supports iterative reasoning and multi-turn conversations
+    """
+    role = user.get("role")
+    user_email = user.get("sub")
+
+    # Prompt injection check
+    if is_injection(req.message):
+        audit({"action": "blocked_prompt_injection", "user": user_email, "role": role, "prompt": req.message})
+        raise HTTPException(status_code=400, detail="Potential prompt injection detected and blocked.")
+
+    # Get conversation memory
+    memory = get_memory()
+    convo_id = req.convo_id or str(uuid.uuid4())
+
+    # Load conversation history if exists
+    conversation_history = memory.get_conversation(convo_id)
+
+    # Get agent
+    try:
+        agent = get_fc_agent()
+    except ValueError as e:
+        # OpenAI not configured
+        audit({"action": "agent_init_failed", "error": str(e), "user": user_email, "role": role})
+        raise HTTPException(
+            status_code=503,
+            detail="Agent requires OpenAI API key. Please configure OPENAI_API_KEY."
+        )
+
+    # Audit callback
+    def audit_callback(event: Dict[str, Any]):
+        audit({**event, "user": user_email, "role": role, "convo_id": convo_id})
+
+    # Run agent
+    audit({"action": "agent_start", "user": user_email, "role": role, "query": req.message[:200], "convo_id": convo_id})
+
+    try:
+        result = agent.run(
+            user_message=req.message,
+            role=role,
+            conversation_history=conversation_history,
+            audit_callback=audit_callback
+        )
+    except Exception as e:
+        audit({"action": "agent_error", "user": user_email, "role": role, "error": str(e), "convo_id": convo_id})
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+    # Save conversation history
+    memory.save_conversation(
+        convo_id=convo_id,
+        messages=result["messages"],
+        user_email=user_email,
+        role=role
+    )
+
+    # Apply DLP masking to final answer
+    masked_answer, dlp_counts = mask_text(result["answer"], role=role)
+
+    audit({
+        "action": "agent_complete",
+        "user": user_email,
+        "role": role,
+        "convo_id": convo_id,
+        "iterations": result["iterations"],
+        "tool_calls_count": len(result["tool_calls"]),
+        "dlp_counts": dlp_counts
+    })
+
+    # Format response with reasoning transparency
+    return {
+        "reply": masked_answer,
+        "convo_id": convo_id,
+        "tool_calls": result["tool_calls"],
+        "iterations": result["iterations"],
+        "agent_type": "function_calling",
+        "dlp_counts": dlp_counts,
+        "max_iterations_reached": result.get("max_iterations_reached", False),
+        # New: reasoning transparency fields
+        "reasoning_steps": result.get("reasoning_steps", []),
+        "routes_used": result.get("routes_used", {}),
+        "metadata": {
+            "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            "total_llm_calls": result.get("routes_used", {}).get("llm_calls", 0),
+            "used_rag": result.get("routes_used", {}).get("rag_searches", 0) > 0,
+            "used_logs": result.get("routes_used", {}).get("log_queries", 0) > 0,
+        }
+    }
+
+@app.get("/agent/memory/stats")
+def get_memory_stats(user=Depends(require_user)):
+    """Get conversation memory statistics"""
+    memory = get_memory()
+    stats = memory.get_stats()
+    return stats
 

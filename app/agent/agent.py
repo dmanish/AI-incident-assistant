@@ -52,11 +52,45 @@ def decide_tools(user_msg: str) -> Dict[str, Any]:
 
     # Fallback heuristic
     t = user_msg.lower()
-    logs_signals = any(s in t for s in ["failed login","login attempts","show logs","today","yesterday","last ","past "])
+
+    # Log query signals: any mention of login events, time ranges, or specific users/IPs
+    logs_signals = any(s in t for s in [
+        "login", "logout", "auth", "attempt",  # Auth events
+        "today", "yesterday", "this week", "last week", "this month",  # Time ranges
+        "past ", "last ", "recent",  # Relative time
+        "show logs", "query logs", "check logs",  # Explicit log requests
+        "how many", "count", "number of"  # Quantitative queries (usually need logs)
+    ])
+
+    # Policy/procedure signals: asking for guidance, not data
+    policy_signals = any(s in t for s in [
+        "policy", "playbook", "procedure", "process",
+        "should i", "what should", "how do i", "how to handle",
+        "how to respond", "how to escalate", "what to do",
+        "steps for", "guidance"
+    ])
+
+    # If it's clearly a logs query, only use RAG if policy/playbook is explicitly mentioned
+    if logs_signals and not policy_signals:
+        return {
+            "use_rag": False,
+            "use_logs": True,
+            "reason": "heuristic:logs-only"
+        }
+
+    # If both signals, use both tools
+    if logs_signals and policy_signals:
+        return {
+            "use_rag": True,
+            "use_logs": True,
+            "reason": "heuristic:logs+rag"
+        }
+
+    # Otherwise, default to RAG for policy/procedure questions
     return {
-        "use_rag": not logs_signals or ("how" in t or "policy" in t or "playbook" in t),
-        "use_logs": logs_signals,
-        "reason": "heuristic"
+        "use_rag": True,
+        "use_logs": False,
+        "reason": "heuristic:rag-only"
     }
 
 def synthesize_answer(

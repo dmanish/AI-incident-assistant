@@ -53,6 +53,23 @@ export async function agentChat(token: string, message: string) {
   return asJsonOrText(r);
 }
 
+// New: Function calling agent with reasoning transparency
+export async function agentChatV2(
+  token: string,
+  message: string,
+  convo_id?: string
+) {
+  const r = await fetch(`${BASE}/agent/chat/v2`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ message, convo_id }),
+  });
+  return asJsonOrText(r);
+}
+
 // Optional helper for the logs table screen (if used by UI)
 export async function queryLogs(token: string, params: { date?: string; username?: string; limit?: number }) {
   const r = await fetch(`${BASE}/logs/query`, {

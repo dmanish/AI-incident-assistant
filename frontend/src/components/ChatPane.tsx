@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { chat } from "../api";
+import { agentChat } from "../api";
 import type { Session } from "../types";
 import MessageInput from "./MessageInput";
 import ToolCallsPanel from "./ToolCallsPanel";
+import AgentResponseDualPane from "./AgentResponseDualPane";
 
 type ToolCall =
   | { tool: "ioc_enrich"; ip: string; result: any }
@@ -10,10 +11,46 @@ type ToolCall =
   | { tool: "log_query"; date: string; username?: string | null; result_count: number }
   | Record<string, any>;
 
+interface ReasoningStep {
+  step: number;
+  type: string;
+  tool_name?: string;
+  description: string;
+  arguments?: Record<string, any>;
+  success?: boolean;
+  result_preview?: string;
+  llm_reasoning?: string;
+}
+
+interface RoutesUsed {
+  llm_calls: number;
+  rag_searches: number;
+  log_queries: number;
+  tools_used: string[];
+}
+
+interface Metadata {
+  model: string;
+  total_llm_calls: number;
+  used_rag: boolean;
+  used_logs: boolean;
+}
+
+interface AgentResponse {
+  reply: string;
+  reasoning_steps: ReasoningStep[];
+  routes_used: RoutesUsed;
+  metadata: Metadata;
+  iterations: number;
+  convo_id?: string;
+  tool_calls?: ToolCall[];
+}
+
 type Msg = {
   role: "user" | "assistant";
   content: string;
   tool_calls?: ToolCall[];
+  agent_response?: AgentResponse;
 };
 
 export default function ChatPane({
@@ -27,7 +64,7 @@ export default function ChatPane({
     {
       role: "assistant",
       content:
-        "Ask about policies or run tools.\nExample: “Show me today’s failed login attempts for username jdoe”.",
+        "Ask about policies or run tools.\nExample: \"Show me today's failed login attempts for username jdoe\".",
     },
   ]);
   const listRef = useRef<HTMLDivElement>(null);
@@ -44,16 +81,27 @@ export default function ChatPane({
     setMessages((prev) => [...prev, { role: "user", content: text }]);
 
     try {
-      const res = await chat(session.token, text);
+      // Use the old agent endpoint (no OpenAI key required)
+      const res = await agentChat(session.token, text);
+
       const pretty = res.reply || "(no reply)";
       const toolCalls: ToolCall[] | undefined = Array.isArray(res.tool_calls)
         ? (res.tool_calls as ToolCall[])
         : undefined;
 
-      // Push assistant message with tool_calls preserved
+      // Check if we have enhanced agent response data
+      // (Old endpoint won't have this, so it will show simple text view)
+      const hasAgentData = res.reasoning_steps && res.routes_used && res.metadata;
+
+      // Push assistant message with full agent response
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: pretty, tool_calls: toolCalls },
+        {
+          role: "assistant",
+          content: pretty,
+          tool_calls: toolCalls,
+          agent_response: hasAgentData ? res : undefined,
+        },
       ]);
     } catch (e: any) {
       setMessages((prev) => [
@@ -78,11 +126,27 @@ export default function ChatPane({
       <div className="chat-list" ref={listRef}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
-            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{m.content}</pre>
+            {/* Show user messages as before */}
+            {m.role === "user" && (
+              <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{m.content}</pre>
+            )}
 
-            {/* Render Enrichment panel only for assistant messages that include tool_calls */}
-            {m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0 && (
-              <ToolCallsPanel toolCalls={m.tool_calls} />
+            {/* For assistant messages, check if we have enhanced agent data */}
+            {m.role === "assistant" && (
+              <>
+                {/* If we have enhanced agent response data, use the dual-pane component */}
+                {m.agent_response?.reasoning_steps && m.agent_response?.routes_used && m.agent_response?.metadata ? (
+                  <AgentResponseDualPane response={m.agent_response} />
+                ) : (
+                  /* Otherwise, show simple text response */
+                  <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{m.content}</pre>
+                )}
+
+                {/* Render legacy tool calls panel if no agent data but has tool_calls */}
+                {!m.agent_response && Array.isArray(m.tool_calls) && m.tool_calls.length > 0 && (
+                  <ToolCallsPanel toolCalls={m.tool_calls} />
+                )}
+              </>
             )}
           </div>
         ))}
