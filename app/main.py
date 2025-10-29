@@ -545,7 +545,7 @@ def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
             from datetime import datetime
             today = datetime.utcnow().date().isoformat()
             log_result = query_failed_logins(today, username=None)
-            if log_result:
+            if log_result is not None and len(log_result) > 0:
                 logs_context = f"---\nTool: log_query\nDate: {today}\nUsername: None\nFound: {len(log_result)} rows\nSample: {log_result[:2]}"
                 tool_calls_made.append({"tool": "log_query", "result_count": len(log_result)})
 
