@@ -47,7 +47,18 @@ done
 # Start React frontend
 echo "🎨 Starting React UI on port 3000..."
 cd frontend
-export VITE_BACKEND_URL=http://localhost:8080
+
+# Detect Codespaces and construct the correct backend URL
+if [ -n "$CODESPACE_NAME" ]; then
+    # In Codespaces, use the public forwarded URL
+    export VITE_BACKEND_URL="https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    echo "🌐 Detected Codespaces - Backend URL: $VITE_BACKEND_URL"
+else
+    # Local dev or Docker - use localhost
+    export VITE_BACKEND_URL=http://localhost:8080
+    echo "🖥️  Local mode - Backend URL: $VITE_BACKEND_URL"
+fi
+
 npm run dev
 
 # Cleanup on exit

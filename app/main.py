@@ -38,8 +38,8 @@ JWT_EXP_SECS = int(os.getenv("JWT_EXP_SECS", "3600"))
 app = FastAPI(title="AI Incident Assistant")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],  # tighten later
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
