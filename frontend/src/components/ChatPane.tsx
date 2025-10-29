@@ -95,8 +95,13 @@ export default function ChatPane({
         ? (res.tool_calls as ToolCall[])
         : undefined;
 
-      // Check if we have enhanced agent response data
-      const hasAgentData = res.reasoning_steps && res.routes_used && res.metadata;
+      // Check if we have enhanced agent response data (and it's valid)
+      const hasAgentData =
+        res.reasoning_steps &&
+        res.routes_used &&
+        res.metadata &&
+        typeof res.routes_used === 'object' &&
+        Object.keys(res.routes_used).length > 0;
 
       // Push assistant message with full agent response
       setMessages((prev) => [
