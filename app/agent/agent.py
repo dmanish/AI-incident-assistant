@@ -48,7 +48,7 @@ def _get_llm_client() -> Optional[tuple[Any, LLMProvider]]:
 
 def decide_tools(user_msg: str) -> Dict[str, Any]:
     """
-    Returns: {"use_rag": bool, "use_logs": bool, "reason": str}
+    Returns: {"use_rag": bool, "use_logs": bool, "use_web_search": bool, "reason": str}
     """
     result = _get_llm_client()
     if result:
@@ -58,7 +58,8 @@ def decide_tools(user_msg: str) -> Dict[str, Any]:
                 "You route enterprise security questions to tools.\n"
                 "- Use RAG for policies/process/playbooks/how/what.\n"
                 "- Use LOGS for real-time evidence: today/last N days, failed login(s), attempts, counts, which IP/user.\n"
-                "Respond as compact JSON: {\"use_rag\":true|false, \"use_logs\":true|false, \"reason\":\"...\"}."
+                "- Use WEB_SEARCH for external threat intelligence: CVEs, vulnerabilities, IP reputation, domain analysis, latest threats.\n"
+                "Respond as compact JSON: {\"use_rag\":true|false, \"use_logs\":true|false, \"use_web_search\":true|false, \"reason\":\"...\"}."
             )
 
             import json
@@ -93,53 +94,17 @@ def decide_tools(user_msg: str) -> Dict[str, Any]:
             return {
                 "use_rag": bool(data.get("use_rag", False)),
                 "use_logs": bool(data.get("use_logs", False)),
+                "use_web_search": bool(data.get("use_web_search", False)),
                 "reason": str(data.get("reason","")).strip()[:200]
             }
         except Exception:
             pass
 
-    # Fallback heuristic
-    t = user_msg.lower()
+    # Fallback to semantic routing when LLM is unavailable
+    from app.agent.semantic_router import get_router
 
-    # Log query signals: any mention of login events, time ranges, or specific users/IPs
-    logs_signals = any(s in t for s in [
-        "login", "logout", "auth", "attempt",  # Auth events
-        "today", "yesterday", "this week", "last week", "this month",  # Time ranges
-        "past ", "last ", "recent",  # Relative time
-        "show logs", "query logs", "check logs",  # Explicit log requests
-        "how many", "count", "number of"  # Quantitative queries (usually need logs)
-    ])
-
-    # Policy/procedure signals: asking for guidance, not data
-    policy_signals = any(s in t for s in [
-        "policy", "playbook", "procedure", "process",
-        "should i", "what should", "how do i", "how to handle",
-        "how to respond", "how to escalate", "what to do",
-        "steps for", "guidance"
-    ])
-
-    # If it's clearly a logs query, only use RAG if policy/playbook is explicitly mentioned
-    if logs_signals and not policy_signals:
-        return {
-            "use_rag": False,
-            "use_logs": True,
-            "reason": "heuristic:logs-only"
-        }
-
-    # If both signals, use both tools
-    if logs_signals and policy_signals:
-        return {
-            "use_rag": True,
-            "use_logs": True,
-            "reason": "heuristic:logs+rag"
-        }
-
-    # Otherwise, default to RAG for policy/procedure questions
-    return {
-        "use_rag": True,
-        "use_logs": False,
-        "reason": "heuristic:rag-only"
-    }
+    router = get_router()
+    return router.route(user_msg)
 
 def synthesize_answer(
     user_msg: str,
