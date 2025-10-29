@@ -111,21 +111,30 @@ def synthesize_answer(
             out += "\nLog evidence:\n" + logs_context[:600]
         return out
 
-    sys = (
-        "You are an enterprise security incident assistant.\n"
-        "Use policy/playbook excerpts from `Policy Context` and log summaries from `Log Evidence`.\n"
-        "Be concise and actionable. If log evidence is empty, say what to check next rather than guessing."
-    )
-    prompt = (
-        f"User Query:\n{user_msg}\n\n"
-        f"Policy Context:\n{rag_context or '(none)'}\n\n"
-        f"Log Evidence:\n{logs_context or '(none)'}\n"
-    )
-    r = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
-        messages=[{"role":"system","content":sys},{"role":"user","content":prompt}],
-        temperature=0.2,
-        max_tokens=600
-    )
-    return r.choices[0].message.content
+    try:
+        sys = (
+            "You are an enterprise security incident assistant.\n"
+            "Use policy/playbook excerpts from `Policy Context` and log summaries from `Log Evidence`.\n"
+            "Be concise and actionable. If log evidence is empty, say what to check next rather than guessing."
+        )
+        prompt = (
+            f"User Query:\n{user_msg}\n\n"
+            f"Policy Context:\n{rag_context or '(none)'}\n\n"
+            f"Log Evidence:\n{logs_context or '(none)'}\n"
+        )
+        r = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
+            messages=[{"role":"system","content":sys},{"role":"user","content":prompt}],
+            temperature=0.2,
+            max_tokens=600
+        )
+        return r.choices[0].message.content
+    except Exception:
+        # OpenAI call failed (quota, network, etc) - fall back to local
+        out = "Here's a concise answer based on available context.\n"
+        if rag_context:
+            out += "\nPolicy/Playbook context:\n" + rag_context[:1200]
+        if logs_context:
+            out += "\nLog evidence:\n" + logs_context[:600]
+        return out
 
