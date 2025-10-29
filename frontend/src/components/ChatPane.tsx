@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { agentChat } from "../api";
+import { agentChatV2 } from "../api";
 import type { Session } from "../types";
 import MessageInput from "./MessageInput";
 import ToolCallsPanel from "./ToolCallsPanel";
@@ -67,6 +67,7 @@ export default function ChatPane({
         "Ask about policies or run tools.\nExample: \"Show me today's failed login attempts for username jdoe\".",
     },
   ]);
+  const [convoId, setConvoId] = useState<string | undefined>(undefined);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,8 +82,13 @@ export default function ChatPane({
     setMessages((prev) => [...prev, { role: "user", content: text }]);
 
     try {
-      // Use the old agent endpoint (no OpenAI key required)
-      const res = await agentChat(session.token, text);
+      // Use the new function calling agent with conversation history
+      const res = await agentChatV2(session.token, text, convoId);
+
+      // Update conversation ID for multi-turn conversations
+      if (res.convo_id) {
+        setConvoId(res.convo_id);
+      }
 
       const pretty = res.reply || "(no reply)";
       const toolCalls: ToolCall[] | undefined = Array.isArray(res.tool_calls)
@@ -90,7 +96,6 @@ export default function ChatPane({
         : undefined;
 
       // Check if we have enhanced agent response data
-      // (Old endpoint won't have this, so it will show simple text view)
       const hasAgentData = res.reasoning_steps && res.routes_used && res.metadata;
 
       // Push assistant message with full agent response
