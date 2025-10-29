@@ -24,8 +24,12 @@ cd ..
 echo "🔧 Bootstrapping data..."
 python scripts/bootstrap.py
 
-# Start the ingest guard in background
-echo "📊 Starting ingest guard..."
+# Run initial ingest synchronously (so backend has data ready)
+echo "📚 Running initial document ingestion..."
+python scripts/ingest.py
+
+# Start the ingest guard in background (to watch for changes)
+echo "📊 Starting ingest guard to watch for changes..."
 python scripts/ingest_guard.py &
 INGEST_PID=$!
 
