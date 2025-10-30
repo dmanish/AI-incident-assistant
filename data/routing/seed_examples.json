@@ -1,0 +1,434 @@
+[
+  {
+    "id": "web_001",
+    "query": "is there a CVE on TLS",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Direct CVE query"
+  },
+  {
+    "id": "web_002",
+    "query": "any vulnerabilities reported this year on glibc",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Vulnerability search with timeframe"
+  },
+  {
+    "id": "web_003",
+    "query": "what security issues exist in OpenSSL",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Security issues phrasing"
+  },
+  {
+    "id": "web_004",
+    "query": "CVE-2024-6387 details",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Specific CVE ID lookup"
+  },
+  {
+    "id": "web_005",
+    "query": "recent exploits for Apache web server",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Exploit search"
+  },
+  {
+    "id": "web_006",
+    "query": "zero day vulnerabilities in Docker",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Zero-day search"
+  },
+  {
+    "id": "web_007",
+    "query": "latest ransomware threats 2024",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Malware/ransomware"
+  },
+  {
+    "id": "web_008",
+    "query": "security advisories for nginx",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Security advisories"
+  },
+  {
+    "id": "web_009",
+    "query": "check IP reputation for 1.2.3.4",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "IP reputation check"
+  },
+  {
+    "id": "web_010",
+    "query": "is IP 185.21.54.100 malicious",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "IP threat check"
+  },
+  {
+    "id": "web_011",
+    "query": "domain reputation for evil.com",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Domain reputation"
+  },
+  {
+    "id": "web_012",
+    "query": "patches available for Log4j vulnerability",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Patch availability"
+  },
+  {
+    "id": "web_013",
+    "query": "security updates for Linux kernel",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Security updates"
+  },
+  {
+    "id": "web_014",
+    "query": "has there been a breach reported for company X",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Breach intelligence"
+  },
+  {
+    "id": "web_015",
+    "query": "active phishing campaigns targeting finance",
+    "category": "threat_intelligence",
+    "use_rag": false,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Phishing campaign intelligence"
+  },
+  {
+    "id": "logs_001",
+    "query": "show failed login attempts today",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Failed logins query"
+  },
+  {
+    "id": "logs_002",
+    "query": "failed logins for user alice",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "User-specific auth logs"
+  },
+  {
+    "id": "logs_003",
+    "query": "authentication attempts from IP 192.168.1.100",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "IP-based log query"
+  },
+  {
+    "id": "logs_004",
+    "query": "how many login failures yesterday",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Count query"
+  },
+  {
+    "id": "logs_005",
+    "query": "show me authentication events this week",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Time range query"
+  },
+  {
+    "id": "logs_006",
+    "query": "recent failed login attempts",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Recent events"
+  },
+  {
+    "id": "logs_007",
+    "query": "check logs for user jdoe",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Explicit log check"
+  },
+  {
+    "id": "logs_008",
+    "query": "query authentication logs for the last 7 days",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Multi-day range"
+  },
+  {
+    "id": "logs_009",
+    "query": "count failed authentications by IP",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Aggregation query"
+  },
+  {
+    "id": "logs_010",
+    "query": "show all login attempts from this morning",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Time-specific"
+  },
+  {
+    "id": "logs_011",
+    "query": "who failed to login today",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Who-based query"
+  },
+  {
+    "id": "logs_012",
+    "query": "logout events for admin users",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Logout events"
+  },
+  {
+    "id": "logs_013",
+    "query": "suspicious login patterns",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Pattern detection"
+  },
+  {
+    "id": "logs_014",
+    "query": "brute force attempts detected",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Attack pattern"
+  },
+  {
+    "id": "logs_015",
+    "query": "account lockouts this month",
+    "category": "authentication_logs",
+    "use_rag": false,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Lockout events"
+  },
+  {
+    "id": "rag_001",
+    "query": "what is our password policy",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Policy query"
+  },
+  {
+    "id": "rag_002",
+    "query": "how do I respond to a phishing incident",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Incident response playbook"
+  },
+  {
+    "id": "rag_003",
+    "query": "what are the steps for escalation",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Escalation procedure"
+  },
+  {
+    "id": "rag_004",
+    "query": "our incident response playbook",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Playbook request"
+  },
+  {
+    "id": "rag_005",
+    "query": "what should I do if I detect malware",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Action guidance"
+  },
+  {
+    "id": "rag_006",
+    "query": "security policies for data handling",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Data policy"
+  },
+  {
+    "id": "rag_007",
+    "query": "how to handle a data breach",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Breach response"
+  },
+  {
+    "id": "rag_008",
+    "query": "access control procedures",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Access procedures"
+  },
+  {
+    "id": "rag_009",
+    "query": "what is the process for account recovery",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Recovery process"
+  },
+  {
+    "id": "rag_010",
+    "query": "MFA requirements for employees",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "MFA policy"
+  },
+  {
+    "id": "rag_011",
+    "query": "compliance requirements for PCI",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Compliance"
+  },
+  {
+    "id": "rag_012",
+    "query": "security training procedures",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Training policy"
+  },
+  {
+    "id": "rag_013",
+    "query": "how to report a security incident",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Reporting procedure"
+  },
+  {
+    "id": "rag_014",
+    "query": "acceptable use policy for systems",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "AUP"
+  },
+  {
+    "id": "rag_015",
+    "query": "what are our backup procedures",
+    "category": "policy_guidance",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": false,
+    "notes": "Backup policy"
+  },
+  {
+    "id": "combo_001",
+    "query": "show failed logins and what's our lockout policy",
+    "category": "logs_and_policy",
+    "use_rag": true,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Combined: logs + policy"
+  },
+  {
+    "id": "combo_002",
+    "query": "recent CVE and our patch management process",
+    "category": "threat_and_policy",
+    "use_rag": true,
+    "use_logs": false,
+    "use_web_search": true,
+    "notes": "Combined: CVE + policy"
+  },
+  {
+    "id": "combo_003",
+    "query": "authentication failures and incident response steps",
+    "category": "logs_and_policy",
+    "use_rag": true,
+    "use_logs": true,
+    "use_web_search": false,
+    "notes": "Combined: logs + playbook"
+  }
+]

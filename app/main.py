@@ -17,7 +17,7 @@ from pydantic import BaseModel
 import jwt
 from app.agent.agent import decide_tools, synthesize_answer
 from app.agent.function_calling_agent import create_agent
-from app.agent.executors import create_tool_executors
+from app.agent.executors_enhanced import create_enhanced_tool_executors
 from app.agent.memory import get_memory
 import uuid
 
@@ -186,30 +186,37 @@ con_boot.execute("""
 """)
 con_boot.close()
 
+def query_authentication_logs(
+    date_start: str,
+    date_end: Optional[str] = None,
+    result_filter: str = "failed",
+    username: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    limit: int = 200
+):
+    """Enhanced authentication log query with flexible filtering"""
+    from app.utils.log_query_enhanced import query_authentication_logs_enhanced
+    return query_authentication_logs_enhanced(
+        log_dir=LOG_DIR,
+        duck_db_path=DUCK_DB_PATH,
+        date_start=date_start,
+        date_end=date_end,
+        result_filter=result_filter,
+        username=username,
+        ip_address=ip_address,
+        limit=limit
+    )
+
+# Backward compatible wrapper for old code
 def query_failed_logins(date_iso: str, username: Optional[str] = None, limit: int = 200):
-    import pandas as pd
-    files = list(LOG_DIR.glob("*.csv"))
-    if not files:
-        return pd.DataFrame([])
-    con = duckdb.connect(DUCK_DB_PATH, read_only=False)
-    try:
-        con.execute("PRAGMA threads=2;")
-        con.execute("PRAGMA memory_limit='256MB';")
-        user_clause = "AND lower(user) = lower(?)" if username else ""
-        sql = f"""
-            SELECT timestamp, user, action, result, ip
-            FROM read_csv_auto('{(LOG_DIR / "*.csv").as_posix()}', union_by_name=true)
-            WHERE cast(timestamp as varchar) LIKE ?
-              AND lower(result) = 'failed'
-              {user_clause}
-            ORDER BY timestamp DESC
-            LIMIT ?
-        """
-        params = [f"{date_iso}%"] + ([username] if username else []) + [limit]
-        df = con.execute(sql, params).fetchdf()
-        return df
-    finally:
-        con.close()
+    """Legacy wrapper - calls enhanced version"""
+    return query_authentication_logs(
+        date_start=date_iso,
+        date_end=date_iso,
+        result_filter="failed",
+        username=username,
+        limit=limit
+    )
 
 # --- OpenAI (chat) ---
 from openai import OpenAI
@@ -381,7 +388,8 @@ def agent_chat(req: AgentChatRequest, user=Depends(require_user)):
     route = decide_tools(req.message)
     use_rag = bool(route.get("use_rag"))
     use_logs = bool(route.get("use_logs"))
-    audit({"action":"agent_decision","user":user["sub"],"role":role,"decision":{"rag":use_rag,"logs":use_logs,"reason":route.get("reason")}})
+    use_web_search = bool(route.get("use_web_search"))
+    audit({"action":"agent_decision","user":user["sub"],"role":role,"decision":{"rag":use_rag,"logs":use_logs,"web_search":use_web_search,"reason":route.get("reason")}})
 
     retrieved: List[Dict[str,Any]] = []
     citations: List[str] = []
@@ -424,8 +432,57 @@ def agent_chat(req: AgentChatRequest, user=Depends(require_user)):
             except Exception as e:
                 audit({"action":"tool_error","tool":"log_query","user":user["sub"],"role":role,"error":str(e)})
 
-    # Ask LLM to synthesize (policy + logs). Falls back locally if needed.
-    answer = synthesize_answer(req.message, rag_context=rag_context, logs_context=logs_context)
+    # Web search for threat intelligence
+    web_search_context = ""
+    if use_web_search:
+        try:
+            from app.utils.web_search import search_threat_intelligence, format_search_results
+
+            # Determine search type from query
+            query_lower = req.message.lower()
+            if "cve" in query_lower or "vulnerability" in query_lower:
+                search_type = "cve"
+            elif any(word in query_lower for word in ["ip", "reputation"]):
+                search_type = "ip_reputation"
+            elif any(word in query_lower for word in ["domain", "url"]):
+                search_type = "domain_reputation"
+            else:
+                search_type = "general"
+
+            # Execute search using improved web search module
+            search_response = search_threat_intelligence(
+                query=req.message,
+                search_type=search_type,
+                max_results=5
+            )
+
+            # Format results for LLM
+            web_search_context = format_search_results(search_response)
+
+            # Audit logging
+            tool_calls.append({
+                "tool": "web_search",
+                "query": req.message,
+                "search_type": search_type,
+                "result_count": search_response.get('result_count', 0),
+                "source": search_response.get('source', 'unknown')
+            })
+            audit({
+                "action": "tool_call",
+                "tool": "web_search",
+                "user": user["sub"],
+                "role": role,
+                "query": req.message,
+                "result_count": search_response.get('result_count', 0),
+                "source": search_response.get('source', 'unknown')
+            })
+        except Exception as e:
+            web_search_context = f"\n---\nTool: web_search\nError: {str(e)}\nConsider searching security databases manually.\n"
+            audit({"action": "tool_error", "tool": "web_search", "user": user["sub"], "role": role, "error": str(e)})
+
+    # Ask LLM to synthesize (policy + logs + web search). Falls back locally if needed.
+    combined_context = rag_context + logs_context + web_search_context
+    answer = synthesize_answer(req.message, rag_context=combined_context, logs_context="")
 
     # --- DLP masking (post-LLM) ---
     masked, dlp_counts = mask_text(answer, role=role)
@@ -449,10 +506,10 @@ def get_fc_agent():
     """Get or create function calling agent"""
     global _fc_agent
     if _fc_agent is None:
-        # Create tool executors
-        tool_executors = create_tool_executors(
+        # Create enhanced tool executors
+        tool_executors = create_enhanced_tool_executors(
             retrieve_chunks_fn=retrieve_chunks,
-            query_failed_logins_fn=query_failed_logins,
+            query_logs_fn=query_authentication_logs,
             role_allows_tool_fn=role_allows_tool,
             role_allows_doc_fn=role_allows_doc
         )
@@ -534,12 +591,31 @@ def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
         rag_context = ""
         logs_context = ""
         tool_calls_made = []
+        reasoning_steps = []
+
+        # Add initial reasoning step explaining fallback
+        reasoning_steps.append({
+            "step": 1,
+            "type": "fallback_routing",
+            "description": f"LLM unavailable (quota exceeded), using semantic routing fallback",
+            "routing_method": decision.get("method", "unknown"),
+            "routing_reason": decision.get("reason", ""),
+            "confidence": decision.get("confidence"),
+            "matched_example": decision.get("matched_example", "")[:100] if decision.get("matched_example") else None
+        })
 
         if decision["use_rag"]:
             chunks = retrieve_chunks(req.message, role=role, top_k=5)
             if chunks:
                 rag_context = "\n\n".join([f"---\nSource: {c['metadata'].get('source_path','')}\n{c['text']}" for c in chunks])
                 tool_calls_made.append({"tool": "knowledge_base_search", "result_count": len(chunks)})
+                reasoning_steps.append({
+                    "step": len(reasoning_steps) + 1,
+                    "type": "tool_call",
+                    "tool_name": "knowledge_base_search",
+                    "description": f"Searching knowledge base for relevant security policies and procedures",
+                    "result": f"Found {len(chunks)} relevant documents"
+                })
 
         if decision["use_logs"]:
             from datetime import datetime
@@ -548,21 +624,97 @@ def agent_chat_v2(req: FunctionCallingChatRequest, user=Depends(require_user)):
             if log_result is not None and len(log_result) > 0:
                 logs_context = f"---\nTool: log_query\nDate: {today}\nUsername: None\nFound: {len(log_result)} rows\nSample: {log_result[:2]}"
                 tool_calls_made.append({"tool": "log_query", "result_count": len(log_result)})
+                reasoning_steps.append({
+                    "step": len(reasoning_steps) + 1,
+                    "type": "tool_call",
+                    "tool_name": "log_query",
+                    "description": f"Querying authentication logs for date: {today}",
+                    "arguments": {"date": today, "username": None},
+                    "result": f"Found {len(log_result)} log entries"
+                })
+
+        # Web search for threat intelligence (fallback mode)
+        web_search_context = ""
+        if decision.get("use_web_search"):
+            try:
+                from app.utils.web_search import search_threat_intelligence, format_search_results
+
+                # Determine search type from query
+                query_lower = req.message.lower()
+                if "cve" in query_lower or "vulnerability" in query_lower:
+                    search_type = "cve"
+                elif any(word in query_lower for word in ["ip", "reputation"]):
+                    search_type = "ip_reputation"
+                elif any(word in query_lower for word in ["domain", "url"]):
+                    search_type = "domain_reputation"
+                else:
+                    search_type = "general"
+
+                # Execute search using improved web search module
+                search_response = search_threat_intelligence(
+                    query=req.message,
+                    search_type=search_type,
+                    max_results=5
+                )
+
+                # Format results for LLM
+                web_search_context = format_search_results(search_response)
+
+                # Track tool call
+                tool_calls_made.append({
+                    "tool": "web_search",
+                    "query": req.message,
+                    "search_type": search_type,
+                    "result_count": search_response.get('result_count', 0),
+                    "source": search_response.get('source', 'unknown')
+                })
+                reasoning_steps.append({
+                    "step": len(reasoning_steps) + 1,
+                    "type": "tool_call",
+                    "tool_name": "web_search",
+                    "description": f"Searching threat intelligence databases ({search_type})",
+                    "arguments": {"query": req.message, "search_type": search_type, "max_results": 5},
+                    "result": f"Found {search_response.get('result_count', 0)} results from {search_response.get('source', 'unknown')}"
+                })
+                audit({
+                    "action": "tool_call",
+                    "tool": "web_search",
+                    "user": user_email,
+                    "role": role,
+                    "query": req.message,
+                    "result_count": search_response.get('result_count', 0),
+                    "source": search_response.get('source', 'unknown')
+                })
+            except Exception as e:
+                web_search_context = f"\n---\nTool: web_search\nError: {str(e)}\nConsider searching security databases manually.\n"
+                audit({"action": "tool_error", "tool": "web_search", "user": user_email, "role": role, "error": str(e)})
 
         # Synthesize answer
-        final_answer = synthesize_answer(req.message, rag_context, logs_context)
+        combined_context = rag_context + logs_context + web_search_context
+        final_answer = synthesize_answer(req.message, rag_context=combined_context, logs_context="")
 
-        # Format as v2 response (without full reasoning transparency)
+        # Add final reasoning step
+        reasoning_steps.append({
+            "step": len(reasoning_steps) + 1,
+            "type": "final_answer",
+            "description": "Synthesizing final answer from gathered information",
+            "context_sources": [
+                tool["tool"] for tool in tool_calls_made
+            ]
+        })
+
+        # Format as v2 response (with reasoning transparency)
         result = {
             "answer": final_answer,
             "tool_calls": tool_calls_made,
             "iterations": 1,
             "messages": [],
-            "reasoning_steps": [],  # Empty for heuristic mode
+            "reasoning_steps": reasoning_steps,
             "routes_used": {
-                "llm_calls": 1 if rag_context or logs_context else 0,
+                "llm_calls": 1 if rag_context or logs_context or web_search_context else 0,
                 "rag_searches": 1 if decision["use_rag"] and rag_context else 0,
                 "log_queries": 1 if decision["use_logs"] and logs_context else 0,
+                "web_searches": 1 if decision.get("use_web_search") and web_search_context else 0,
                 "tools_used": [tc["tool"] for tc in tool_calls_made]
             }
         }

@@ -1,0 +1,130 @@
+# config/routing_rules.yaml
+# Phase 2: Override rules for semantic routing
+#
+# These rules fire BEFORE semantic vector search
+# Use for critical patterns that must always route correctly
+
+version: "1.0"
+
+# Critical patterns that override semantic routing
+overrides:
+  - name: "explicit_cve_id"
+    description: "Detect CVE ID pattern (e.g., CVE-2024-1234)"
+    pattern: "CVE-\\d{4}-\\d{4,7}"
+    type: "regex"
+    priority: 100
+    route:
+      use_rag: false
+      use_logs: false
+      use_web_search: true
+    reason: "override:cve-id-pattern"
+    category: "threat_intelligence"
+
+  - name: "ip_address_query"
+    description: "Detect IPv4 address in query"
+    pattern: "\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b"
+    type: "regex"
+    priority: 90
+    route:
+      use_rag: false
+      use_logs: false
+      use_web_search: true
+    reason: "override:ip-address-detected"
+    category: "threat_intelligence"
+
+  - name: "url_domain_pattern"
+    description: "Detect URL or domain pattern"
+    pattern: "\\b(?:https?://|www\\.|[a-z0-9-]+\\.(?:com|org|net|io|gov|edu)\\b)"
+    type: "regex"
+    priority: 85
+    route:
+      use_rag: false
+      use_logs: false
+      use_web_search: true
+    reason: "override:url-domain-pattern"
+    category: "threat_intelligence"
+
+  - name: "explicit_policy_keywords"
+    description: "Strong policy/playbook indicators"
+    keywords:
+      - "password policy"
+      - "incident response playbook"
+      - "escalation procedure"
+      - "security policy"
+      - "compliance requirement"
+    require_all: false  # Match if ANY keyword present
+    type: "keyword"
+    priority: 80
+    route:
+      use_rag: true
+      use_logs: false
+      use_web_search: false
+    reason: "override:explicit-policy-request"
+    category: "policy_guidance"
+
+  - name: "explicit_log_request"
+    description: "Explicit log query indicators"
+    keywords:
+      - "show logs"
+      - "check logs"
+      - "query logs"
+      - "authentication logs"
+      - "failed logins"
+      - "login attempts"
+    require_all: false
+    type: "keyword"
+    priority: 75
+    route:
+      use_rag: false
+      use_logs: true
+      use_web_search: false
+    reason: "override:explicit-log-query"
+    category: "authentication_logs"
+
+  - name: "time_range_with_logs"
+    description: "Time-based query with log indicators"
+    patterns:
+      - "\\b(?:today|yesterday|this week|last week|this month)\\b.*\\b(?:login|auth|attempt|failed)\\b"
+      - "\\b(?:login|auth|attempt|failed)\\b.*\\b(?:today|yesterday|this week|last week|this month)\\b"
+    type: "regex"
+    priority: 70
+    route:
+      use_rag: false
+      use_logs: true
+      use_web_search: false
+    reason: "override:time-based-log-query"
+    category: "authentication_logs"
+
+# Default route when no semantic match and no override matches
+default:
+  use_rag: true
+  use_logs: false
+  use_web_search: false
+  reason: "fallback:default-rag"
+  confidence: 0.3
+  category: "unknown"
+
+# Thresholds and configuration
+thresholds:
+  semantic_similarity: 0.75    # Minimum similarity for semantic match
+  min_confidence: 0.60         # Absolute minimum to use semantic match
+  high_confidence: 0.85        # High confidence (very reliable)
+
+# Logging configuration
+logging:
+  log_low_confidence: true     # Log queries with confidence < 0.75
+  log_overrides: true          # Log when override rules fire
+  log_execution_time: true     # Track routing performance
+
+# Performance tuning
+performance:
+  max_search_results: 3        # Top K results from vector search
+  cache_enabled: false         # Future: cache frequent queries
+  cache_ttl_seconds: 300       # Future: cache TTL
+
+# Analytics
+analytics:
+  track_routing_decisions: true
+  track_confidence_scores: true
+  track_matched_examples: true
+  export_format: "json"        # json | csv

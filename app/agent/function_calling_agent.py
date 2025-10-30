@@ -7,7 +7,7 @@ Supports iterative reasoning and multi-turn tool execution
 import os
 import json
 from typing import Dict, Any, List, Optional, Tuple, Callable, Literal
-from .tools import TOOL_DEFINITIONS, format_tool_result
+from .tools_enhanced import TOOL_DEFINITIONS, format_tool_result
 
 LLMProvider = Literal["openai", "anthropic", "google"]
 
