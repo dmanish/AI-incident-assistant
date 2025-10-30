@@ -74,17 +74,17 @@ VITE_BACKEND_URL=http://localhost:8080 npm run dev
 
 ---
 
-### 🐳 Option 2 — Run Locally with Docker Compose
+### 🐳 Option 2 — Run with Docker Compose (Local or Codespaces)
 
 **One Command:**
 ```bash
 ./start-docker.sh
 ```
 
-This script runs:
-```bash
-docker compose -f docker/docker-compose.yml up --build
-```
+This script:
+- Auto-detects whether you're in **Codespaces** or running **locally**
+- Sets the correct backend URL for the frontend
+- Builds and starts both backend and frontend containers
 
 This will:
 - Build images using the Dockerfile in `docker/`
@@ -94,8 +94,15 @@ This will:
 
 #### Access the apps
 
+**Local Docker:**
 - **Backend API health** → [http://localhost:8080/healthz](http://localhost:8080/healthz)
 - **React UI** → [http://localhost:3000](http://localhost:3000)
+
+**Codespaces:**
+- **Backend API** → `https://<your-codespace-id>-8080.app.github.dev/healthz`
+- **React UI** → `https://<your-codespace-id>-3000.app.github.dev/`
+
+💡 *In Codespaces, make sure port 8080 is set to "Public" in the Ports tab.*
 
 #### To stop and clean up:
 ```bash
@@ -196,10 +203,10 @@ To index new internal docs (playbooks, policies, etc.):
 
 | Symptom | Check |
 |----------|--------|
-| LLM replies always say “Here’s a concise answer based on what I can see locally” | Missing or invalid `OPENAI_API_KEY`. |
+| LLM replies always say "Here's a concise answer based on what I can see locally" | Missing or invalid `OPENAI_API_KEY`. |
 | `/chat` fails with `"Log query failed"` | Ensure `data/logs/auth/*.csv` exist (run `scripts/bootstrap.py`). |
 | Docker container exits | Likely missing `.env` or misreferenced paths in `docker-compose.yml`. |
-| UI shows “failed to fetch” | Verify `BACKEND_URL` matches the FastAPI service (`http://api:8080` in compose). |
+| UI shows "failed to fetch" on login | **Codespaces**: Ensure port 8080 is "Public" in Ports tab. **Docker**: Stop and restart with `./start-docker.sh` to auto-configure backend URL. **Browser**: Hard refresh (Ctrl+Shift+R) to clear cache. |
 
 ---
 

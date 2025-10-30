@@ -182,12 +182,14 @@ def search_threat_intelligence(
     source = "unknown"
 
     # Strategy 1: For CVE queries, try NVD first
-    if search_type == "cve" or any(word in query.lower() for word in ['cve', 'vulnerability', 'vulnerabilities']):
+    # Only use NVD if search_type is explicitly "cve" (specific CVE lookup)
+    # Don't use NVD for general questions about CVEs (counting, statistics, etc.)
+    if search_type == "cve":
         results = search_cve_nvd(query, max_results)
         if results:
             source = "NVD (NIST)"
 
-    # Strategy 2: If NVD didn't return results, fall back to DuckDuckGo HTML search
+    # Strategy 2: If NVD didn't return results, or if using general search, use DuckDuckGo
     if not results:
         # Enhance query for better results
         if search_type == "cve":

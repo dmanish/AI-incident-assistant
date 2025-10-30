@@ -768,3 +768,153 @@ def get_memory_stats(user=Depends(require_user)):
     stats = memory.get_stats()
     return stats
 
+
+# --- Routing Feedback & Learning Endpoints ---
+
+class RoutingFeedbackRequest(BaseModel):
+    query: str
+    actual_route: Dict[str, bool]  # {use_rag, use_logs, use_web_search}
+    feedback_type: str  # 'correct' | 'incorrect' | 'partial'
+    expected_route: Optional[Dict[str, bool]] = None
+    confidence_score: Optional[float] = None
+    routing_method: Optional[str] = None
+    user_comment: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+@app.post("/agent/routing/feedback")
+def submit_routing_feedback(
+    req: RoutingFeedbackRequest,
+    user=Depends(require_user)
+):
+    """
+    Submit feedback on routing decision to improve future accuracy
+
+    This enables continuous learning:
+    - Users can flag incorrect routing
+    - System learns from patterns
+    - Auto-generates training examples
+    """
+    try:
+        from app.agent.routing_feedback import get_feedback_manager
+
+        feedback_mgr = get_feedback_manager()
+
+        feedback_id = feedback_mgr.record_feedback(
+            query=req.query,
+            actual_route=req.actual_route,
+            feedback_type=req.feedback_type,
+            expected_route=req.expected_route,
+            user_id=user["sub"],
+            session_id=req.session_id,
+            confidence_score=req.confidence_score,
+            routing_method=req.routing_method,
+            user_comment=req.user_comment
+        )
+
+        # Audit log
+        audit({
+            "action": "routing_feedback",
+            "user": user["sub"],
+            "feedback_type": req.feedback_type,
+            "query": req.query[:100],
+            "feedback_id": feedback_id
+        })
+
+        return {
+            "success": True,
+            "feedback_id": feedback_id,
+            "message": "Thank you! Your feedback will help improve routing accuracy."
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@app.get("/agent/routing/feedback/stats")
+def get_routing_feedback_stats(
+    days: int = 30,
+    user=Depends(require_user)
+):
+    """Get statistics on routing feedback and accuracy"""
+    try:
+        from app.agent.routing_feedback import get_feedback_manager
+
+        feedback_mgr = get_feedback_manager()
+        stats = feedback_mgr.get_feedback_stats(days=days)
+
+        return stats
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+
+
+@app.post("/agent/routing/learn")
+def trigger_learning(
+    auto_approve_only: bool = False,
+    user=Depends(require_user)
+):
+    """
+    Trigger learning process to generate new training examples from feedback
+
+    This analyzes feedback patterns and creates training examples.
+    Admin can review and approve examples before ingestion.
+    """
+    try:
+        from app.agent.routing_feedback import get_feedback_manager
+
+        # Check if user has admin role
+        role = user.get("role", "user")
+        if role not in ["admin", "security"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        feedback_mgr = get_feedback_manager()
+
+        # Analyze patterns
+        patterns = feedback_mgr.analyze_feedback_patterns()
+
+        # Generate training examples
+        examples = feedback_mgr.generate_training_examples(
+            patterns=patterns,
+            auto_approve_threshold=5
+        )
+
+        # Export for review
+        num_exported = feedback_mgr.export_training_examples(
+            auto_approve_only=auto_approve_only
+        )
+
+        # Audit log
+        audit({
+            "action": "routing_learning_triggered",
+            "user": user["sub"],
+            "patterns_found": len(patterns),
+            "examples_generated": len(examples),
+            "examples_exported": num_exported
+        })
+
+        return {
+            "success": True,
+            "patterns_analyzed": len(patterns),
+            "training_examples_generated": len(examples),
+            "exported_to": "data/routing/feedback_training_examples.json",
+            "next_steps": [
+                "Review exported examples in feedback_training_examples.json",
+                "Approve examples by adding to data/routing/seed_examples.json",
+                "Run: python scripts/ingest_routing_examples.py to rebuild routing DB"
+            ]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+

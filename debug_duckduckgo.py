@@ -1,100 +1,82 @@
 #!/usr/bin/env python3
-"""
-Debug DuckDuckGo API to understand why it returns blank results
-"""
+"""Debug DuckDuckGo search to see what's happening"""
 
 import requests
-import json
+import re
 
-def test_duckduckgo_api():
-    """Test DuckDuckGo API with CVE queries"""
 
-    test_queries = [
-        "any vulnerabilities reported this year on glibc",
-        "CVE glibc 2024",
-        "is there a CVE on TLS",
-        "what vulnerability was reported this month on TCP"
-    ]
+def test_duckduckgo():
+    query = "how many CVE were reported on glib this year"
 
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    print(f"Testing DuckDuckGo search for: {query}")
+    print("=" * 60)
 
-    print("=" * 70)
-    print("Testing DuckDuckGo Instant Answer API")
-    print("=" * 70)
+    try:
+        url = "https://html.duckduckgo.com/html/"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        data = {'q': query}
 
-    for query in test_queries:
-        print(f"\n{'=' * 70}")
+        print(f"Sending POST request to: {url}")
         print(f"Query: {query}")
-        print("=" * 70)
 
-        try:
-            # Test with enhanced query
-            enhanced_query = f"{query} CVE vulnerability security advisory"
-            params = {'q': enhanced_query, 'format': 'json'}
+        response = requests.post(url, headers=headers, data=data, timeout=10)
 
-            print(f"Enhanced query: {enhanced_query}")
-            print(f"URL: https://api.duckduckgo.com/")
-            print(f"Params: {params}")
+        print(f"Response status: {response.status_code}")
+        print(f"Response length: {len(response.text)} chars")
 
-            response = requests.get(
-                'https://api.duckduckgo.com/',
-                params=params,
-                headers=headers,
-                timeout=10
-            )
+        if response.status_code == 200:
+            html = response.text
 
-            print(f"Status: {response.status_code}")
+            # Try to extract results
+            result_pattern = r'<div class="result__body">.*?<a class="result__a" href="(.*?)".*?>(.*?)</a>.*?<a class="result__snippet".*?>(.*?)</a>'
+            matches = re.findall(result_pattern, html, re.DOTALL)
 
-            if response.status_code == 200:
-                data = response.json()
+            print(f"\nFound {len(matches)} results using regex pattern")
 
-                print(f"\nResponse keys: {list(data.keys())}")
-
-                # Check what we're getting
-                abstract = data.get('AbstractText', '')
-                abstract_source = data.get('AbstractSource', '')
-                abstract_url = data.get('AbstractURL', '')
-                related = data.get('RelatedTopics', [])
-                answer = data.get('Answer', '')
-                definition = data.get('Definition', '')
-
-                print(f"\nAbstractText: {abstract[:200] if abstract else '(empty)'}")
-                print(f"AbstractSource: {abstract_source}")
-                print(f"AbstractURL: {abstract_url}")
-                print(f"Answer: {answer[:200] if answer else '(empty)'}")
-                print(f"Definition: {definition[:200] if definition else '(empty)'}")
-                print(f"RelatedTopics count: {len(related)}")
-
-                if related:
-                    print("\nFirst 3 RelatedTopics:")
-                    for i, topic in enumerate(related[:3]):
-                        if isinstance(topic, dict):
-                            topic_text = topic.get('Text', '')
-                            topic_url = topic.get('FirstURL', '')
-                            print(f"  {i+1}. {topic_text[:100]}")
-                            print(f"     URL: {topic_url}")
-
-                # Show full JSON for first query
-                if query == test_queries[0]:
-                    print("\n" + "=" * 70)
-                    print("FULL JSON RESPONSE (first query only):")
-                    print("=" * 70)
-                    print(json.dumps(data, indent=2))
-
+            if matches:
+                print("\nFirst 3 results:")
+                for i, match in enumerate(matches[:3], 1):
+                    url_match, title_match, snippet_match = match
+                    # Clean HTML tags
+                    title = re.sub(r'<.*?>', '', title_match).strip()[:100]
+                    snippet = re.sub(r'<.*?>', '', snippet_match).strip()[:150]
+                    print(f"\n{i}. {title}")
+                    print(f"   {snippet}")
+                    print(f"   URL: {url_match[:80]}")
             else:
-                print(f"ERROR: Status {response.status_code}")
-                print(response.text[:500])
+                print("\n⚠️  No results found with regex pattern")
+                print("Let's check if HTML structure changed...")
 
-        except Exception as e:
-            print(f"ERROR: {e}")
+                # Debug: Check what's in the HTML
+                if 'result__body' in html:
+                    print("✓ 'result__body' found in HTML")
+                else:
+                    print("✗ 'result__body' NOT found in HTML")
 
-    print("\n" + "=" * 70)
-    print("CONCLUSION:")
-    print("=" * 70)
-    print("DuckDuckGo Instant Answer API is designed for instant answers")
-    print("(like 'what is the capital of France'), NOT for real-time")
-    print("threat intelligence or CVE lookups.")
-    print("\nWe need a different approach for web search.")
+                if 'result__a' in html:
+                    print("✓ 'result__a' found in HTML")
+                else:
+                    print("✗ 'result__a' NOT found in HTML")
+
+                # Try to find any <a> tags
+                links = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html)
+                print(f"\nFound {len(links)} total <a> tags in HTML")
+
+                # Save HTML for inspection
+                with open('/tmp/duckduckgo_response.html', 'w') as f:
+                    f.write(html)
+                print("\n📄 Saved HTML response to /tmp/duckduckgo_response.html for inspection")
+
+        else:
+            print(f"❌ Request failed with status {response.status_code}")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 if __name__ == "__main__":
-    test_duckduckgo_api()
+    test_duckduckgo()

@@ -105,7 +105,11 @@ Note: This tool searches external sources, not internal logs.""",
                     "search_type": {
                         "type": "string",
                         "enum": ["general", "cve", "ip_reputation", "domain_reputation"],
-                        "description": "Type of search: 'general' = broad threat intel, 'cve' = specific vulnerability, 'ip_reputation' = IP analysis, 'domain_reputation' = domain/URL analysis",
+                        "description": """Type of search to perform:
+- 'general': Broad threat intel, vulnerability counts, security news, general questions about CVEs/threats (DEFAULT - use when in doubt)
+- 'cve': ONLY for looking up a SPECIFIC CVE ID (e.g., CVE-2024-1234). Do NOT use for counting CVEs or asking 'how many CVEs'
+- 'ip_reputation': IP address analysis/reputation lookup
+- 'domain_reputation': Domain/URL analysis or reputation check""",
                         "default": "general"
                     },
                     "max_results": {
