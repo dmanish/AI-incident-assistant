@@ -38,7 +38,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_BACKEND_URL=http://localhost:8080
+      # Auto-detect Codespaces or use localhost for local Docker
+      # In Codespaces, use the forwarded HTTPS URL; locally use localhost
+      - VITE_BACKEND_URL=${VITE_BACKEND_URL:-http://localhost:8080}
     volumes:
       - ../frontend:/app
     command: sh -lc "npm ci || npm install && npm run dev -- --host"
