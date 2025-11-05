@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Incident Assistant - Technical Architecture Flow (React-UI-Branch)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.8em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 1.2em;
+        }
+
+        .badge {
+            background: #4caf50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            display: inline-block;
+            margin: 5px;
+        }
+
+        h2 {
+            color: #764ba2;
+            margin-top: 50px;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 4px solid #667eea;
+            font-size: 2.2em;
+        }
+
+        h3 {
+            color: #667eea;
+            margin-top: 35px;
+            margin-bottom: 20px;
+            font-size: 1.7em;
+        }
+
+        h4 {
+            color: #764ba2;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .toc {
+            background: #f0f0f0;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 40px;
+        }
+
+        .toc ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+
+        .toc li {
+            margin: 10px 0;
+        }
+
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1.1em;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .architecture-diagram {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 25px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            white-space: pre;
+            overflow-x: auto;
+            margin: 25px 0;
+            font-size: 0.85em;
+            line-height: 1.5;
+            border: 3px solid #667eea;
+        }
+
+        .code-ref {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 4px 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 3px;
+            text-decoration: none;
+            border: 1px solid #90caf9;
+            font-weight: 600;
+        }
+
+        .code-ref:hover {
+            background: #1565c0;
+            color: white;
+            transform: scale(1.05);
+            transition: all 0.2s;
+        }
+
+        .step {
+            background: white;
+            border: 3px solid #764ba2;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .step-number {
+            display: inline-block;
+            background: #764ba2;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 35px;
+            font-weight: bold;
+            margin-right: 15px;
+            font-size: 1.2em;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #764ba2;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .feature-box {
+            background: #fff3e0;
+            border-left: 6px solid #ff9800;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        .security-box {
+            background: #ffebee;
+            border-left: 6px solid #f44336;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        .info-box {
+            background: #e8f5e9;
+            border-left: 6px solid #4caf50;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        .warning-box {
+            background: #fff8e1;
+            border-left: 6px solid #ffc107;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            font-size: 1em;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .highlight {
+            background: #fff59d;
+            padding: 3px 7px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        code {
+            background: #f5f5f5;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #d32f2f;
+            font-size: 0.95em;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+            margin: 25px 0;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 25px 0;
+        }
+
+        .card {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+        }
+
+        .card h4 {
+            margin-top: 0;
+        }
+
+        ul, ol {
+            margin: 15px 0 15px 30px;
+            line-height: 1.9;
+        }
+
+        li {
+            margin: 10px 0;
+            font-size: 1.05em;
+        }
+
+        .flow-section {
+            background: #f8f9fa;
+            border-left: 5px solid #667eea;
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+
+        .metric-box {
+            text-align: center;
+            padding: 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            margin: 15px;
+        }
+
+        .metric-value {
+            font-size: 3.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .metric-label {
+            font-size: 1.2em;
+        }
+
+        strong {
+            color: #764ba2;
+        }
+
+        .new-feature {
+            background: #4caf50;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 AI Incident Assistant</h1>
+        <p class="subtitle">Technical Architecture Flow - React-UI-Branch</p>
+        <div style="text-align: center; margin-bottom: 30px;">
+            <span class="badge">React + TypeScript Frontend</span>
+            <span class="badge">3-Tier Semantic Routing</span>
+            <span class="badge">Function Calling Agent</span>
+            <span class="badge">Continuous Learning</span>
+            <span class="badge">Multi-Provider LLM</span>
+        </div>
+
+        <div class="toc">
+            <h3>📑 Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">1. System Overview</a></li>
+                <li><a href="#architecture">2. High-Level Architecture</a></li>
+                <li><a href="#semantic-routing">3. Three-Tier Semantic Routing System</a></li>
+                <li><a href="#function-calling">4. Function Calling Agent (Agentic LLM)</a></li>
+                <li><a href="#tools">5. Tool Implementations</a></li>
+                <li><a href="#rag">6. Two-Level RAG System</a></li>
+                <li><a href="#web-search">7. Web Search & Threat Intelligence</a></li>
+                <li><a href="#continuous-learning">8. Continuous Learning System</a></li>
+                <li><a href="#frontend">9. React Frontend Architecture</a></li>
+                <li><a href="#security">10. Security Features</a></li>
+                <li><a href="#complete-flow">11. Complete Request-Response Flow</a></li>
+                <li><a href="#data-models">12. Data Models & Storage</a></li>
+            </ul>
+        </div>
+
+        <section id="overview">
+            <h2>1. System Overview</h2>
+
+            <div class="info-box">
+                <h3>Key Differentiators from Main Branch</h3>
+                <ul>
+                    <li><strong>🎯 Intelligent Routing:</strong> Vector-based semantic routing replaces keyword matching</li>
+                    <li><strong>🤖 True Agent:</strong> LLM-driven function calling with iterative reasoning</li>
+                    <li><strong>🌐 External Intelligence:</strong> CVE lookup, IP reputation, domain analysis</li>
+                    <li><strong>🎓 Self-Improving:</strong> Feedback-based routing accuracy improvement</li>
+                    <li><strong>⚡ Multi-Provider:</strong> OpenAI → Anthropic → Google fallback chain</li>
+                    <li><strong>🎨 Advanced UI:</strong> React with dual-pane reasoning transparency</li>
+                </ul>
+            </div>
+
+            <div class="grid-3">
+                <div class="metric-box">
+                    <div class="metric-value">920</div>
+                    <div class="metric-label">Lines (main.py)</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value">3</div>
+                    <div class="metric-label">Routing Tiers</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value">5</div>
+                    <div class="metric-label">Max Iterations</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="architecture">
+            <h2>2. High-Level Architecture</h2>
+
+            <div class="architecture-diagram">
+┌─────────────────────────────────────────────────────────────────────┐
+│                 React + TypeScript Frontend                         │
+│                 <a href="../frontend/src/App.tsx" class="code-ref">frontend/src/App.tsx</a>                                  │
+│  ┌──────────────────┐  ┌─────────────────────────────────────────┐ │
+│  │  LoginPanel      │  │   ChatPane (Multi-turn conversations)   │ │
+│  │  JWT Auth        │  │   - MessageInput                        │ │
+│  └──────────────────┘  │   - AgentResponseDualPane               │ │
+│                        │     * Answer Pane                        │ │
+│                        │     * Reasoning Pane (synced scroll)     │ │
+│                        │   - ToolCallsPanel (visualization)       │ │
+│                        └─────────────────────────────────────────┘ │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │ HTTP/REST API
+                                 │ POST /agent/chat/v2 (primary endpoint)
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      FastAPI Backend                                │
+│                    <a href="../app/main.py" class="code-ref">app/main.py</a> (920 lines)                             │
+├─────────────────────────────────────────────────────────────────────┤
+│  Routes:                                                            │
+│  ├─ POST /login                    → JWT generation                │
+│  ├─ POST /chat                     → Legacy heuristic chat         │
+│  ├─ POST /agent/chat               → Improved routing              │
+│  ├─ POST /agent/chat/v2            → Function calling agent ⭐     │
+│  ├─ GET  /agent/memory/stats       → Conversation memory           │
+│  ├─ POST /agent/routing/feedback   → Submit feedback               │
+│  ├─ GET  /agent/routing/feedback/stats → Routing analytics         │
+│  └─ POST /agent/routing/learn      → Trigger learning cycle        │
+├─────────────────────────────────────────────────────────────────────┤
+│  Core Components:                                                   │
+│  ┌────────────────────────────────────────────────────────────────┐│
+│  │  <a href="../app/agent/semantic_router.py" class="code-ref">semantic_router.py</a> - 3-Tier Routing System            ││
+│  │  ├─ Tier 1: Override rules (YAML config)                      ││
+│  │  ├─ Tier 2: Vector semantic search (ChromaDB)                 ││
+│  │  └─ Tier 3: Fallback LLM reasoning                            ││
+│  └────────────────────────────────────────────────────────────────┘│
+│  ┌────────────────────────────────────────────────────────────────┐│
+│  │  <a href="../app/agent/function_calling_agent.py" class="code-ref">function_calling_agent.py</a> - True Agent                ││
+│  │  ├─ Multi-provider: OpenAI → Anthropic → Google              ││
+│  │  ├─ Iterative reasoning (up to 5 loops)                       ││
+│  │  ├─ Parallel tool execution                                   ││
+│  │  └─ Multi-turn conversation memory (60-min TTL)               ││
+│  └────────────────────────────────────────────────────────────────┘│
+│  ┌────────────────────────────────────────────────────────────────┐│
+│  │  <a href="../app/agent/routing_feedback.py" class="code-ref">routing_feedback.py</a> - Continuous Learning              ││
+│  │  ├─ Feedback collection (SQLite)                              ││
+│  │  ├─ Pattern analysis                                          ││
+│  │  ├─ Auto-example generation                                   ││
+│  │  └─ Routing model improvement                                 ││
+│  └────────────────────────────────────────────────────────────────┘│
+│  ┌────────────────────────────────────────────────────────────────┐│
+│  │  <a href="../app/utils/web_search.py" class="code-ref">web_search.py</a> - Threat Intelligence Search              ││
+│  │  ├─ CVE lookup (NVD API + CISA KEV)                          ││
+│  │  ├─ IP reputation (DuckDuckGo + AbuseIPDB)                   ││
+│  │  └─ Domain analysis (DuckDuckGo search)                      ││
+│  └────────────────────────────────────────────────────────────────┘│
+│  ┌────────────────────────────────────────────────────────────────┐│
+│  │  <a href="../app/security/dlp.py" class="code-ref">security/dlp.py</a> - Data Loss Prevention                 ││
+│  │  ├─ Regex masking (emails, IPs, JWTs, AWS keys)              ││
+│  │  ├─ Entropy-based detection                                   ││
+│  │  └─ Applied post-LLM                                          ││
+│  └────────────────────────────────────────────────────────────────┘│
+└───────────────┬─────────────────────────┬─────────────────┬─────────┘
+                │                         │                 │
+    ┌───────────▼──────┐   ┌──────────────▼────────┐   ┌───▼───────┐
+    │  Chroma (RAG)    │   │  Chroma (Routing)     │   │  DuckDB   │
+    │  security_docs   │   │  routing_examples     │   │  + CSV    │
+    │  <a href="../data/chroma" class="code-ref">data/chroma/</a>     │   │  <a href="../data/routing_db" class="code-ref">data/routing_db/</a>      │   │  Logs     │
+    └──────────────────┘   └───────────────────────┘   └───────────┘
+            </div>
+        </section>
+
+        <section id="semantic-routing">
+            <h2>3. Three-Tier Semantic Routing System <span class="new-feature">NEW</span></h2>
+
+            <p style="font-size: 1.1em; margin-bottom: 20px;">
+                Replaces keyword matching with intelligent semantic understanding of user intent.
+            </p>
+
+            <div class="step">
+                <span class="step-number">1</span>
+                <div class="step-title">Tier 1: Override Rules (Config-Based)</div>
+                <p><strong>Location:</strong> <a href="../config/routing_rules.yaml" class="code-ref">config/routing_rules.yaml</a></p>
+                <p><strong>Matcher:</strong> <a href="../app/agent/rule_matcher.py" class="code-ref">app/agent/rule_matcher.py</a></p>
+                <p>Deterministic rules that override semantic routing for high-precision cases.</p>
+
+                <h4>Rule Categories (7 types):</h4>
+                <table>
+                    <tr>
+                        <th>Category</th>
+                        <th>Example Pattern</th>
+                        <th>Priority</th>
+                        <th>Route</th>
+                    </tr>
+                    <tr>
+                        <td>cve_queries</td>
+                        <td>regex: <code>CVE-\d{4}-\d+</code></td>
+                        <td>10</td>
+                        <td>web_search only</td>
+                    </tr>
+                    <tr>
+                        <td>ip_reputation</td>
+                        <td>keyword: "IP reputation", "malicious IP"</td>
+                        <td>9</td>
+                        <td>web_search only</td>
+                    </tr>
+                    <tr>
+                        <td>domain_analysis</td>
+                        <td>keyword: "suspicious domain"</td>
+                        <td>9</td>
+                        <td>web_search only</td>
+                    </tr>
+                    <tr>
+                        <td>log_queries</td>
+                        <td>keyword: "failed login", "auth logs"</td>
+                        <td>8</td>
+                        <td>logs only</td>
+                    </tr>
+                    <tr>
+                        <td>policy_playbook</td>
+                        <td>keyword: "policy", "playbook", "procedure"</td>
+                        <td>7</td>
+                        <td>rag only</td>
+                    </tr>
+                    <tr>
+                        <td>combined_analysis</td>
+                        <td>keyword: "correlate", "analyze together"</td>
+                        <td>6</td>
+                        <td>rag + logs + web</td>
+                    </tr>
+                    <tr>
+                        <td>generic_security</td>
+                        <td>keyword: "security", "incident"</td>
+                        <td>5</td>
+                        <td>rag + logs</td>
+                    </tr>
+                </table>
+
+                <pre style="background: #f5f5f5; color: #333; padding: 15px; border-radius: 8px;">
+# Example rule in YAML:
+cve_queries:
+  priority: 10
+  patterns:
+    - type: regex
+      value: 'CVE-\d{4}-\d+'
+      case_sensitive: false
+  route:
+    use_rag: false
+    use_logs: false
+    use_web_search: true
+  description: "CVE lookup requires external API"</pre>
+            </div>
+
+            <div class="step">
+                <span class="step-number">2</span>
+                <div class="step-title">Tier 2: Semantic Vector Search</div>
+                <p><strong>Location:</strong> <a href="../app/agent/semantic_router.py#L64-L150" class="code-ref">semantic_router.py:64-150</a></p>
+                <p><strong>Database:</strong> <a href="../data/routing_db" class="code-ref">data/routing_db/</a> (ChromaDB collection)</p>
+                <p><strong>Training Data:</strong> <a href="../data/routing/seed_examples.json" class="code-ref">data/routing/seed_examples.json</a> (40+ examples)</p>
+
+                <h4>How It Works:</h4>
+                <ol>
+                    <li>User query is embedded using <code>all-MiniLM-L6-v2</code> (384-dim)</li>
+                    <li>Query ChromaDB for top-5 most similar routing examples</li>
+                    <li>Calculate confidence score (cosine similarity)</li>
+                    <li>Apply thresholds:
+                        <ul>
+                            <li><strong>High confidence:</strong> &gt; 0.7 → use route directly</li>
+                            <li><strong>Medium confidence:</strong> 0.5-0.7 → aggregate similar routes</li>
+                            <li><strong>Low confidence:</strong> &lt; 0.5 → fallback to Tier 3</li>
+                        </ul>
+                    </li>
+                </ol>
+
+                <pre style="background: #f5f5f5; color: #333; padding: 15px; border-radius: 8px;">
+# Example training data structure:
+{
+  "query": "Show me failed login attempts for user jdoe",
+  "category": "log_queries",
+  "use_rag": false,
+  "use_logs": true,
+  "use_web_search": false,
+  "reasoning": "Direct log query, no external lookup needed"
+}</pre>
+
+                <div class="info-box">
+                    <strong>Configuration:</strong> <a href="../app/agent/routing_config.py" class="code-ref">routing_config.py</a>
+                    <ul>
+                        <li><code>SEMANTIC_SIMILARITY_THRESHOLD = 0.5</code></li>
+                        <li><code>HIGH_CONFIDENCE_THRESHOLD = 0.7</code></li>
+                        <li><code>MAX_SEARCH_RESULTS = 5</code></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">3</span>
+                <div class="step-title">Tier 3: LLM Fallback</div>
+                <p><strong>Location:</strong> <a href="../app/agent/semantic_router.py#L215-L245" class="code-ref">semantic_router.py:215-245</a></p>
+                <p>When semantic search has low confidence, use LLM to reason about routing.</p>
+
+                <h4>Fallback Logic:</h4>
+                <ul>
+                    <li>Simple keyword detection for safety</li>
+                    <li>Default route: <code>{use_rag: true, use_logs: false, use_web_search: false}</code></li>
+                    <li>Logs analytics via <a href="../app/agent/routing_logger.py" class="code-ref">routing_logger.py</a></li>
+                </ul>
+            </div>
+
+            <div class="flow-section">
+                <h3>Routing Decision Flow</h3>
+                <pre style="background: #2d2d2d; color: #f8f8f2;">
+User Query → "What is CVE-2024-1234?"
+
+Step 1 (Override): Check YAML rules
+  ✓ Match: cve_queries (priority 10, regex: CVE-\d{4}-\d+)
+  → Route: {use_web_search: true, use_rag: false, use_logs: false}
+  → Method: "override"
+  → Confidence: 1.0
+
+Result: Web search ONLY (skip Tier 2 & 3)</pre>
+
+                <pre style="background: #2d2d2d; color: #f8f8f2;">
+User Query → "How do I respond to a phishing email?"
+
+Step 1 (Override): Check YAML rules
+  ✗ No high-priority match
+
+Step 2 (Semantic): Query routing vector DB
+  Top result: "What's the procedure for phishing incidents?"
+  Similarity: 0.85 (HIGH confidence)
+  → Route: {use_rag: true, use_logs: false, use_web_search: false}
+  → Method: "semantic"
+  → Confidence: 0.85
+
+Result: RAG retrieval (playbook_phishing.md)</pre>
+            </div>
+        </section>
+
+        <section id="function-calling">
+            <h2>4. Function Calling Agent (Agentic LLM) <span class="new-feature">NEW</span></h2>
+
+            <p style="font-size: 1.1em; margin-bottom: 20px;">
+                True agentic system using LLM function calling APIs for iterative reasoning and autonomous tool execution.
+            </p>
+
+            <div class="step">
+                <span class="step-number">1</span>
+                <div class="step-title">Multi-Provider LLM Support</div>
+                <p><strong>Location:</strong> <a href="../app/agent/function_calling_agent.py#L54-L84" class="code-ref">function_calling_agent.py:54-84</a></p>
+                <p><strong>Fallback Chain:</strong> OpenAI → Anthropic → Google</p>
+
+                <table>
+                    <tr>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>API Key Env Var</th>
+                        <th>Capabilities</th>
+                    </tr>
+                    <tr>
+                        <td>OpenAI</td>
+                        <td>gpt-4o-mini</td>
+                        <td>OPENAI_API_KEY</td>
+                        <td>Function calling, tool use, fast</td>
+                    </tr>
+                    <tr>
+                        <td>Anthropic</td>
+                        <td>claude-3-haiku-20240307</td>
+                        <td>ANTHROPIC_API_KEY</td>
+                        <td>Tool use, reasoning</td>
+                    </tr>
+                    <tr>
+                        <td>Google</td>
+                        <td>gemini-1.5-flash</td>
+                        <td>GOOGLE_API_KEY</td>
+                        <td>Function calling, free tier</td>
+                    </tr>
+                </table>
+
+                <div class="warning-box">
+                    <strong>Automatic Failover:</strong> If OpenAI quota is exceeded or API fails, automatically tries Anthropic, then Google.
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">2</span>
+                <div class="step-title">Iterative Reasoning Loop</div>
+                <p><strong>Location:</strong> <a href="../app/agent/function_calling_agent.py#L100-L250" class="code-ref">function_calling_agent.py:100-250</a></p>
+                <p><strong>Max Iterations:</strong> 5 (configurable)</p>
+
+                <h4>Agent Loop:</h4>
+                <pre style="background: #f5f5f5; color: #333; padding: 15px; border-radius: 8px;">
+for iteration in range(max_iterations):
+    # 1. LLM decides which tools to call
+    response = llm.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=conversation_history,
+        tools=TOOL_DEFINITIONS,  # search_knowledge_base, search_logs, search_threat_intelligence
+        tool_choice="auto"
+    )
+
+    # 2. If no tool calls → final answer
+    if not response.tool_calls:
+        return response.message.content
+
+    # 3. Execute tools in parallel
+    tool_results = execute_tools_parallel(response.tool_calls)
+
+    # 4. Add results to conversation
+    conversation_history.append(tool_results)
+
+    # 5. Continue loop (LLM sees results, decides next action)</pre>
+
+                <div class="info-box">
+                    <strong>Example 5-Iteration Flow:</strong>
+                    <ol>
+                        <li><strong>Iteration 1:</strong> LLM calls <code>search_knowledge_base("phishing")</code></li>
+                        <li><strong>Iteration 2:</strong> LLM calls <code>search_authentication_logs(username="jdoe")</code></li>
+                        <li><strong>Iteration 3:</strong> LLM calls <code>search_threat_intelligence(ioc_type="ip", value="1.2.3.4")</code></li>
+                        <li><strong>Iteration 4:</strong> LLM synthesizes all results</li>
+                        <li><strong>Iteration 5:</strong> Returns final answer (no more tool calls)</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">3</span>
+                <div class="step-title">Multi-Turn Conversation Memory</div>
+                <p><strong>Location:</strong> <a href="../app/agent/memory.py" class="code-ref">app/agent/memory.py</a></p>
+                <p><strong>Endpoint:</strong> <code>POST /agent/chat/v2</code> with <code>conversation_id</code></p>
+
+                <h4>Memory Features:</h4>
+                <ul>
+                    <li><strong>Thread-safe:</strong> Uses <code>threading.Lock()</code> for concurrent access</li>
+                    <li><strong>TTL-based:</strong> Conversations expire after 60 minutes</li>
+                    <li><strong>Auto-cleanup:</strong> Periodic cleanup of expired conversations</li>
+                    <li><strong>Stateless API:</strong> Memory stored in backend, UI passes <code>conversation_id</code></li>
+                </ul>
+
+                <pre style="background: #f5f5f5; color: #333; padding: 15px; border-radius: 8px;">
+# Frontend sends conversation ID
+{
+  "message": "What about user bob?",
+  "conversation_id": "conv_abc123"  // Same ID as previous query
+}
+
+# Backend retrieves context
+memory = get_memory()
+history = memory.get_conversation("conv_abc123")
+# history contains previous Q&A for context</pre>
+            </div>
+
+            <div class="step">
+                <span class="step-number">4</span>
+                <div class="step-title">Tool Definitions</div>
+                <p><strong>Location:</strong> <a href="../app/agent/tools_enhanced.py" class="code-ref">app/agent/tools_enhanced.py</a></p>
+                <p>Tools are defined using OpenAI function calling schema.</p>
+
+                <h4>Available Tools:</h4>
+                <table>
+                    <tr>
+                        <th>Tool Name</th>
+                        <th>Description</th>
+                        <th>Parameters</th>
+                    </tr>
+                    <tr>
+                        <td><code>search_knowledge_base</code></td>
+                        <td>RAG search over policies/playbooks</td>
+                        <td>query (str), top_k (int, default=5)</td>
+                    </tr>
+                    <tr>
+                        <td><code>search_authentication_logs</code></td>
+                        <td>Query DuckDB auth logs</td>
+                        <td>username (optional), date (optional), action (optional)</td>
+                    </tr>
+                    <tr>
+                        <td><code>search_threat_intelligence</code></td>
+                        <td>External threat intel search</td>
+                        <td>ioc_type (ip/domain/cve), ioc_value (str)</td>
+                    </tr>
+                </table>
+
+                <div class="feature-box">
+                    <strong>Example Tool Call (OpenAI format):</strong>
+                    <pre style="margin-top: 10px;">
+{
+  "id": "call_abc123",
+  "type": "function",
+  "function": {
+    "name": "search_authentication_logs",
+    "arguments": "{\"username\": \"jdoe\", \"date\": \"2025-11-05\"}"
+  }
+}</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="tools">
+            <h2>5. Tool Implementations</h2>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h4>Tool 1: search_knowledge_base</h4>
+                    <p><strong>Executor:</strong> <a href="../app/agent/executors_enhanced.py#L20-L80" class="code-ref">executors_enhanced.py:20-80</a></p>
+                    <ul>
+                        <li>Queries Chroma vector DB (<code>security_docs</code> collection)</li>
+                        <li>Uses sentence-transformers for embeddings</li>
+                        <li>Re-ranks with BM25 for keyword relevance</li>
+                        <li>Filters by RBAC (role-based document access)</li>
+                        <li>Returns top-k chunks with metadata</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h4>Tool 2: search_authentication_logs</h4>
+                    <p><strong>Executor:</strong> <a href="../app/agent/executors_enhanced.py#L82-L150" class="code-ref">executors_enhanced.py:82-150</a></p>
+                    <ul>
+                        <li>Queries DuckDB over CSV log files</li>
+                        <li>Supports filtering by username, date, action</li>
+                        <li>Aggregation support (count, unique IPs, etc.)</li>
+                        <li>RBAC check (only security/engineering roles)</li>
+                        <li>Returns structured DataFrame results</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h4>Tool 3: search_threat_intelligence</h4>
+                    <p><strong>Executor:</strong> <a href="../app/agent/executors_enhanced.py#L152-L220" class="code-ref">executors_enhanced.py:152-220</a></p>
+                    <p><strong>Web Search:</strong> <a href="../app/utils/web_search.py" class="code-ref">app/utils/web_search.py</a></p>
+                    <ul>
+                        <li><strong>CVE:</strong> NVD API + CISA KEV database</li>
+                        <li><strong>IP:</strong> DuckDuckGo scraping + optional AbuseIPDB</li>
+                        <li><strong>Domain:</strong> DuckDuckGo malicious domain check</li>
+                        <li>Caching to avoid redundant API calls</li>
+                        <li>Returns enriched IOC data</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h4>Tool Execution Modes</h4>
+                    <ul>
+                        <li><strong>Parallel:</strong> Multiple tools run concurrently</li>
+                        <li><strong>Sequential:</strong> Agent can call tools across iterations</li>
+                        <li><strong>Conditional:</strong> LLM decides which tools based on context</li>
+                        <li><strong>Error Handling:</strong> Graceful degradation if tool fails</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="rag">
+            <h2>6. Two-Level RAG System</h2>
+
+            <div class="step">
+                <span class="step-number">1</span>
+                <div class="step-title">Level 1: Bootstrap & Ingestion</div>
+                <p><strong>Scripts:</strong></p>
+                <ul>
+                    <li><a href="../scripts/bootstrap.py" class="code-ref">scripts/bootstrap.py</a> - Initial data setup</li>
+                    <li><a href="../scripts/ingest.py" class="code-ref">scripts/ingest.py</a> - Build RAG vector DB</li>
+                    <li><a href="../scripts/ingest_routing_examples.py" class="code-ref">scripts/ingest_routing_examples.py</a> - Build routing vector DB</li>
+                </ul>
+
+                <h4>Chunking Strategy:</h4>
+                <ul>
+                    <li><strong>Chunk Size:</strong> 800 word tokens</li>
+                    <li><strong>Overlap:</strong> 120 tokens (15%)</li>
+                    <li><strong>Method:</strong> Simple sliding window (can upgrade to semantic chunking)</li>
+                </ul>
+
+                <h4>Embedding Provider:</h4>
+                <ul>
+                    <li><strong>Local (default):</strong> <code>all-MiniLM-L6-v2</code> (384-dim, CPU-friendly)</li>
+                    <li><strong>OpenAI (optional):</strong> <code>text-embedding-3-small</code> (1536-dim)</li>
+                </ul>
+            </div>
+
+            <div class="step">
+                <span class="step-number">2</span>
+                <div class="step-title">Level 2: Hybrid Retrieval (Vector + BM25)</div>
+                <p><strong>Location:</strong> <a href="../app/agent/executors_enhanced.py#L20-L80" class="code-ref">executors_enhanced.py:20-80</a></p>
+
+                <h4>Hybrid Search Process:</h4>
+                <ol>
+                    <li><strong>Vector Search:</strong> Query Chroma for top-20 semantically similar chunks</li>
+                    <li><strong>BM25 Re-ranking:</strong> Apply keyword-based relevance scoring</li>
+                    <li><strong>RBAC Filtering:</strong> Remove chunks user's role can't access</li>
+                    <li><strong>Top-K Selection:</strong> Return top-5 after re-ranking</li>
+                </ol>
+
+                <pre style="background: #f5f5f5; color: #333; padding: 15px; border-radius: 8px;">
+# Hybrid retrieval pseudocode
+results = chroma.query(query, n_results=20)
+corpus = [chunk.text for chunk in results]
+bm25 = BM25Okapi(corpus)
+scores = bm25.get_scores(query.split())
+reranked = sort_by_score(results, scores)
+filtered = [r for r in reranked if role_allows_doc(user_role, r.doc_type)]
+return filtered[:5]</pre>
+            </div>
+        </section>
+
+        <section id="web-search">
+            <h2>7. Web Search & Threat Intelligence <span class="new-feature">NEW</span></h2>
+
+            <p style="font-size: 1.1em; margin-bottom: 20px;">
+                External enrichment for IOCs (Indicators of Compromise) and CVE data.
+            </p>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h4>CVE Lookup</h4>
+                    <p><strong>Location:</strong> <a href="../app/utils/web_search.py#L50-L120" class="code-ref">web_search.py:50-120</a></p>
+                    <p><strong>APIs:</strong></p>
+                    <ul>
+                        <li><strong>NVD API:</strong> NIST National Vulnerability Database</li>
+                        <li><strong>CISA KEV:</strong> Known Exploited Vulnerabilities catalog</li>
+                    </ul>
+                    <p><strong>Returns:</strong> CVE description, CVSS score, affected products, KEV status</p>
+                </div>
+
+                <div class="card">
+                    <h4>IP Reputation</h4>
+                    <p><strong>Location:</strong> <a href="../app/utils/web_search.py#L122-L200" class="code-ref">web_search.py:122-200</a></p>
+                    <p><strong>Methods:</strong></p>
+                    <ul>
+                        <li><strong>DuckDuckGo Scraping:</strong> Free, general reputation</li>
+                        <li><strong>AbuseIPDB API (optional):</strong> Paid, detailed abuse score</li>
+                        <li><strong>IPInfo API (optional):</strong> Geolocation + ASN</li>
+                    </ul>
+                    <p><strong>Returns:</strong> Reputation status, geolocation, abuse reports</p>
+                </div>
+
+                <div class="card">
+                    <h4>Domain Analysis</h4>
+                    <p><strong>Location:</strong> <a href="../app/utils/web_search.py#L202-L250" class="code-ref">web_search.py:202-250</a></p>
+                    <p><strong>Method:</strong> DuckDuckGo search for malicious indicators</p>
+                    <p><strong>Detection:</strong> Keywords like "malware", "phishing", "scam"</p>
+                    <p><strong>Returns:</strong> Risk assessment + search snippets</p>
+                </div>
+
+                <div class="card">
+                    <h4>Search Strategy Routing</h4>
+                    <p><strong>Location:</strong> <a href="../app/utils/web_search.py#L20-L48" class="code-ref">web_search.py:20-48</a></p>
+                    <p>Different strategies for different query types:</p>
+                    <ul>
+                        <li><strong>CVE queries:</strong> Prefer NVD + CISA</li>
+                        <li><strong>IP queries:</strong> AbuseIPDB if available, else DuckDuckGo</li>
+                        <li><strong>Domain queries:</strong> DuckDuckGo search</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="continuous-learning">
+            <h2>8. Continuous Learning System <span class="new-feature">NEW</span></h2>
+
+            <p style="font-size: 1.1em; margin-bottom: 20px;">
+                Feedback-driven routing improvement loop. See <a href="./CONTINUOUS_LEARNING_SYSTEM.md" class="code-ref">CONTINUOUS_LEARNING_SYSTEM.md</a> for full details.
+            </p>
+
+            <div class="architecture-diagram">
+┌─────────────────────────────────────────────────────────┐
+│  User Query → Routing Decision → Response               │
+│  "Show me auth logs" → {use_logs: true} → [Results]    │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+         ┌───────────────────────┐
+         │  User Feedback        │
+         │  Was routing correct? │
+         │  ✅ Yes / ❌ No       │
+         └────────────┬──────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Feedback Storage (<a href="../data/routing/routing_metrics.db" class="code-ref">routing_metrics.db</a>)            │
+│  <a href="../app/agent/routing_feedback.py#L50-L120" class="code-ref">routing_feedback.py:50-120</a>                              │
+├─────────────────────────────────────────────────────────┤
+│  Table: routing_feedback                                │
+│  - query, actual_route, expected_route                  │
+│  - feedback_type (correct/incorrect/partial)            │
+│  - confidence_score, routing_method                     │
+│  - timestamp, processed flag                            │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼ (Weekly or on-demand)
+┌─────────────────────────────────────────────────────────┐
+│  Pattern Analysis                                       │
+│  <a href="../app/agent/routing_feedback.py#L150-L220" class="code-ref">routing_feedback.py:150-220</a>                            │
+├─────────────────────────────────────────────────────────┤
+│  • Cluster similar queries                              │
+│  • Find recurring incorrect routing                     │
+│  • Calculate pattern confidence                         │
+│  • Auto-approve if 5+ occurrences                       │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Training Example Generation                            │
+│  <a href="../app/agent/routing_feedback.py#L222-L280" class="code-ref">routing_feedback.py:222-280</a>                            │
+├─────────────────────────────────────────────────────────┤
+│  Generate new examples:                                 │
+│  → <a href="../data/routing/feedback_training_examples.json" class="code-ref">feedback_training_examples.json</a>                      │
+│                                                         │
+│  Admin reviews and approves                             │
+│  → Merge to <a href="../data/routing/seed_examples.json" class="code-ref">seed_examples.json</a>                           │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Re-ingest Routing DB                                   │
+│  python scripts/ingest_routing_examples.py              │
+├─────────────────────────────────────────────────────────┤
+│  • Rebuild vector database with new examples            │
+│  • Improved routing accuracy for future queries         │
+│  • Continuous improvement cycle                         │
+└─────────────────────────────────────────────────────────┘
+            </div>
+
+            <div class="info-box">
+                <h4>Learning Cycle Stats:</h4>
+                <ul>
+                    <li><strong>Endpoint:</strong> <code>GET /agent/routing/feedback/stats</code></li>
+                    <li><strong>Metrics:</strong> Total feedback, accuracy rate, unprocessed patterns</li>
+                    <li><strong>Auto-approve Threshold:</strong> 5+ occurrences of same pattern</li>
+                    <li><strong>Typical Improvement:</strong> +3-5% accuracy per cycle</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="frontend">
+            <h2>9. React Frontend Architecture <span class="new-feature">NEW</span></h2>
+
+            <p style="font-size: 1.1em; margin-bottom: 20px;">
+                Production-grade React + TypeScript UI with reasoning transparency.
+            </p>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h4>Tech Stack</h4>
+                    <ul>
+                        <li><strong>React:</strong> 18.3.1</li>
+                        <li><strong>TypeScript:</strong> 5.6.2</li>
+                        <li><strong>Build Tool:</strong> Vite 5.4.8</li>
+                        <li><strong>Styling:</strong> CSS modules</li>
+                        <li><strong>API Client:</strong> Fetch API with type safety</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h4>Key Components</h4>
+                    <p><strong>Directory:</strong> <a href="../frontend/src/components" class="code-ref">frontend/src/components/</a></p>
+                    <ul>
+                        <li><a href="../frontend/src/components/LoginPanel.tsx" class="code-ref">LoginPanel.tsx</a> - JWT authentication</li>
+                        <li><a href="../frontend/src/components/ChatPane.tsx" class="code-ref">ChatPane.tsx</a> - Main chat interface</li>
+                        <li><a href="../frontend/src/components/AgentResponseDualPane.tsx" class="code-ref">AgentResponseDualPane.tsx</a> - Dual-pane layout</li>
+                        <li><a href="../frontend/src/components/ToolCallsPanel.tsx" class="code-ref">ToolCallsPanel.tsx</a> - Tool visualization</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">1</span>
+                <div class="step-title">Dual-Pane Layout</div>
+                <p><strong>Component:</strong> <a href="../frontend/src/components/AgentResponseDualPane.tsx" class="code-ref">AgentResponseDualPane.tsx</a></p>
+
+                <h4>Features:</h4>
+                <ul>
+                    <li><strong>Answer Pane:</strong> User-facing response (left side)</li>
+                    <li><strong>Reasoning Pane:</strong> Step-by-step agent reasoning (right side)</li>
+                    <li><strong>Synchronized Scrolling:</strong> Both panes scroll together</li>
+                    <li><strong>Collapsible:</strong> Reasoning pane can be hidden</li>
+                </ul>
+
+                <div class="feature-box">
+                    <strong>Reasoning Display Includes:</strong>
+                    <ul>
+                        <li>Tool calls made (with parameters)</li>
+                        <li>Routing decision (which tier, confidence score)</li>
+                        <li>Routes used (rag/logs/web_search)</li>
+                        <li>Iteration count</li>
+                        <li>Provider used (OpenAI/Anthropic/Google)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">2</span>
+                <div class="step-title">Multi-Turn Conversations</div>
+                <p><strong>Component:</strong> <a href="../frontend/src/components/ChatPane.tsx" class="code-ref">ChatPane.tsx</a></p>
+
+                <h4>Implementation:</h4>
+                <ul>
+                    <li>Generate <code>conversation_id</code> on first message</li>
+                    <li>Pass same ID for follow-up questions</li>
+                    <li>Backend maintains conversation history (60-min TTL)</li>
+                    <li>UI displays full conversation thread</li>
+                </ul>
+
+                <pre style="background: #f5f5f5; color: #333; padding: 15px; border-radius: 8px;">
+// TypeScript conversation management
+const [conversationId, setConversationId] = useState<string | null>(null);
+
+const sendMessage = async (message: string) => {
+  const convId = conversationId || `conv_${Date.now()}_${Math.random()}`;
+  if (!conversationId) setConversationId(convId);
+
+  const response = await agentChatV2({
+    message,
+    conversation_id: convId
+  }, token);
+
+  // Response includes context from previous messages
+};</pre>
+            </div>
+
+            <div class="step">
+                <span class="step-number">3</span>
+                <div class="step-title">Tool Call Visualization</div>
+                <p><strong>Component:</strong> <a href="../frontend/src/components/ToolCallsPanel.tsx" class="code-ref">ToolCallsPanel.tsx</a></p>
+
+                <h4>Displays:</h4>
+                <ul>
+                    <li><strong>IP Enrichment:</strong> Table with IP, reputation, geolocation, ASN</li>
+                    <li><strong>CVE Details:</strong> CVE ID, CVSS score, description, KEV status</li>
+                    <li><strong>Log Query Results:</strong> Paginated table of log entries</li>
+                    <li><strong>RAG Retrieved Docs:</strong> Source file, similarity score, excerpt</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="security">
+            <h2>10. Security Features</h2>
+
+            <div class="security-box">
+                <h3>1. Authentication & Authorization</h3>
+                <p><strong>JWT:</strong> <a href="../app/main.py#L88-L96" class="code-ref">main.py:88-96</a></p>
+                <p><strong>RBAC:</strong> <a href="../app/main.py#L74-L78" class="code-ref">main.py:74-78</a></p>
+
+                <h4>RBAC Matrix:</h4>
+                <table>
+                    <tr>
+                        <th>Role</th>
+                        <th>Tools</th>
+                        <th>Documents</th>
+                    </tr>
+                    <tr>
+                        <td>security</td>
+                        <td>log_query, threat_intelligence</td>
+                        <td>policy, playbook, kb</td>
+                    </tr>
+                    <tr>
+                        <td>engineering</td>
+                        <td>log_query</td>
+                        <td>policy, playbook, kb</td>
+                    </tr>
+                    <tr>
+                        <td>sales</td>
+                        <td>(none)</td>
+                        <td>kb only</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="security-box">
+                <h3>2. Data Loss Prevention (DLP)</h3>
+                <p><strong>Location:</strong> <a href="../app/security/dlp.py" class="code-ref">app/security/dlp.py</a></p>
+                <p><strong>Applied:</strong> Post-LLM, before response to user</p>
+
+                <h4>Masked Patterns:</h4>
+                <ul>
+                    <li><strong>Emails:</strong> <code>user@example.com</code> → <code>[EMAIL_REDACTED]</code></li>
+                    <li><strong>IP Addresses:</strong> <code>192.168.1.1</code> → <code>[IP_REDACTED]</code></li>
+                    <li><strong>JWTs:</strong> <code>eyJhbGc...</code> → <code>[JWT_REDACTED]</code></li>
+                    <li><strong>AWS Keys:</strong> <code>AKIA...</code> → <code>[AWS_KEY_REDACTED]</code></li>
+                    <li><strong>High Entropy:</strong> Random strings &gt;24 chars → <code>[SECRET_REDACTED]</code></li>
+                </ul>
+
+                <div class="info-box">
+                    <strong>Entropy Detection:</strong> Uses Shannon entropy to detect random tokens (likely secrets)
+                </div>
+            </div>
+
+            <div class="security-box">
+                <h3>3. Prompt Injection Prevention</h3>
+                <p><strong>Location:</strong> <a href="../app/main.py#L140-L160" class="code-ref">main.py:140-160</a></p>
+
+                <h4>Blocked Patterns:</h4>
+                <ul>
+                    <li>"ignore previous instructions"</li>
+                    <li>"override the system"</li>
+                    <li>"execute the following"</li>
+                    <li>"system prompt"</li>
+                </ul>
+            </div>
+
+            <div class="security-box">
+                <h3>4. Audit Logging</h3>
+                <p><strong>Location:</strong> <a href="../app/main.py#L47-L59" class="code-ref">main.py:47-59</a></p>
+                <p><strong>File:</strong> <a href="../data/logs/audit.log" class="code-ref">data/logs/audit.log</a></p>
+
+                <h4>Logged Events:</h4>
+                <ul>
+                    <li>Login attempts (success/failure)</li>
+                    <li>Tool calls (with RBAC checks)</li>
+                    <li>Routing decisions (method, confidence)</li>
+                    <li>LLM invocations (provider, model, iterations)</li>
+                    <li>Feedback submissions</li>
+                    <li>Unauthorized access attempts</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="complete-flow">
+            <h2>11. Complete Request-Response Flow</h2>
+
+            <p style="font-size: 1.2em; margin-bottom: 25px;">
+                <strong>Example Query:</strong> "What's the procedure for handling a phishing email?"
+            </p>
+
+            <div class="flow-section">
+                <h3>End-to-End Flow</h3>
+
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <div class="step-title">User Authentication</div>
+                    <p><strong>Frontend:</strong> <a href="../frontend/src/components/LoginPanel.tsx" class="code-ref">LoginPanel.tsx</a></p>
+                    <p><strong>Backend:</strong> <code>POST /login</code> → <a href="../app/main.py#L620-L650" class="code-ref">main.py:620-650</a></p>
+                    <p>User logs in as alice@company/pass1 → JWT token returned</p>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <div class="step-title">Send Message</div>
+                    <p><strong>Frontend:</strong> <a href="../frontend/src/components/ChatPane.tsx" class="code-ref">ChatPane.tsx</a></p>
+                    <p><strong>API:</strong> <code>POST /agent/chat/v2</code></p>
+                    <pre>
+{
+  "message": "What's the procedure for handling a phishing email?",
+  "conversation_id": null  // First message in conversation
+}</pre>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <div class="step-title">JWT Validation & RBAC</div>
+                    <p><strong>Location:</strong> <a href="../app/main.py#L98-L110" class="code-ref">main.py:98-110</a></p>
+                    <p>✅ Token valid → Extract role: "security"</p>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">4</span>
+                    <div class="step-title">Semantic Routing</div>
+                    <p><strong>Router:</strong> <a href="../app/agent/semantic_router.py#L64-L150" class="code-ref">semantic_router.py:64-150</a></p>
+
+                    <p><strong>Tier 1 (Override):</strong> Check YAML rules → No high-priority match</p>
+
+                    <p><strong>Tier 2 (Semantic):</strong> Query routing vector DB</p>
+                    <pre style="background: #2d2d2d; color: #f8f8f2;">
+Top result: "How do I respond to a phishing attack?"
+Similarity: 0.87 (HIGH confidence)
+Route: {use_rag: true, use_logs: false, use_web_search: false}
+Method: "semantic"
+Confidence: 0.87</pre>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">5</span>
+                    <div class="step-title">Function Calling Agent Initialization</div>
+                    <p><strong>Agent:</strong> <a href="../app/agent/function_calling_agent.py#L100-L120" class="code-ref">function_calling_agent.py:100-120</a></p>
+                    <p>Initialize with:</p>
+                    <ul>
+                        <li>Provider: OpenAI (primary)</li>
+                        <li>Model: gpt-4o-mini</li>
+                        <li>Max iterations: 5</li>
+                        <li>Tools: search_knowledge_base, search_authentication_logs, search_threat_intelligence</li>
+                    </ul>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">6</span>
+                    <div class="step-title">Agent Iteration 1: Tool Selection</div>
+                    <p><strong>Location:</strong> <a href="../app/agent/function_calling_agent.py#L140-L180" class="code-ref">function_calling_agent.py:140-180</a></p>
+                    <p>LLM decides: <code>search_knowledge_base("phishing email procedure")</code></p>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">7</span>
+                    <div class="step-title">Tool Execution: RAG Search</div>
+                    <p><strong>Executor:</strong> <a href="../app/agent/executors_enhanced.py#L20-L80" class="code-ref">executors_enhanced.py:20-80</a></p>
+
+                    <ol>
+                        <li>Query Chroma vector DB for "phishing email procedure"</li>
+                        <li>Retrieve top-20 chunks</li>
+                        <li>Re-rank with BM25</li>
+                        <li>Filter by RBAC (security role → allowed all doc types)</li>
+                        <li>Return top-5 chunks</li>
+                    </ol>
+
+                    <p><strong>Result:</strong> Retrieved <code>playbook_phishing.md</code> sections</p>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">8</span>
+                    <div class="step-title">Agent Iteration 2: Synthesis</div>
+                    <p><strong>Location:</strong> <a href="../app/agent/function_calling_agent.py#L200-L240" class="code-ref">function_calling_agent.py:200-240</a></p>
+                    <p>LLM synthesizes answer from retrieved playbook content</p>
+                    <p>No more tool calls → Final answer ready</p>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">9</span>
+                    <div class="step-title">DLP Filtering</div>
+                    <p><strong>DLP:</strong> <a href="../app/security/dlp.py" class="code-ref">security/dlp.py</a></p>
+                    <p>✅ Scan answer for sensitive data → None found</p>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">10</span>
+                    <div class="step-title">Audit Logging</div>
+                    <p><strong>Logger:</strong> <a href="../app/main.py#L57-L59" class="code-ref">main.py:57-59</a></p>
+                    <pre>
+{
+  "action": "agent_chat_v2",
+  "user": "alice@company",
+  "role": "security",
+  "routing_method": "semantic",
+  "routes_used": {"use_rag": true, "use_logs": false, "use_web_search": false},
+  "tools_called": ["search_knowledge_base"],
+  "provider": "openai",
+  "iterations": 2,
+  "ts": "2025-11-05T15:30:45"
+}</pre>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">11</span>
+                    <div class="step-title">Response Returned</div>
+                    <p><strong>API Response:</strong></p>
+                    <pre style="background: #f5f5f5; color: #333; padding: 15px; border-radius: 8px;">
+{
+  "reply": "To handle a phishing email:\n\n1. **DO NOT CLICK** links or attachments\n2. Report to security@company using the 'Report Phishing' button\n3. Delete the email from inbox\n4. If credentials were entered, immediately reset password and enable MFA\n5. Escalate to SOC if >10 users affected\n\nFull playbook: playbook_phishing.md",
+
+  "retrieved": [
+    {
+      "text": "Phishing Response Playbook...",
+      "metadata": {"source_path": "playbook_phishing.md", "doc_type": "playbook"},
+      "score": 0.92
+    }
+  ],
+
+  "tool_calls": [
+    {
+      "tool": "search_knowledge_base",
+      "arguments": {"query": "phishing email procedure"},
+      "result_count": 5
+    }
+  ],
+
+  "reasoning_steps": [
+    "Routing: semantic (confidence 0.87) → use_rag",
+    "Iteration 1: Called search_knowledge_base",
+    "Iteration 2: Synthesized answer from playbook"
+  ],
+
+  "metadata": {
+    "conversation_id": "conv_1730826645_abc123",
+    "routing_method": "semantic",
+    "routes_used": {"use_rag": true, "use_logs": false, "use_web_search": false},
+    "provider": "openai",
+    "iterations": 2
+  }
+}</pre>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">12</span>
+                    <div class="step-title">Frontend Display</div>
+                    <p><strong>Component:</strong> <a href="../frontend/src/components/AgentResponseDualPane.tsx" class="code-ref">AgentResponseDualPane.tsx</a></p>
+
+                    <h4>Answer Pane (Left):</h4>
+                    <p>Displays formatted response with action steps</p>
+
+                    <h4>Reasoning Pane (Right):</h4>
+                    <ul>
+                        <li>Tool calls: search_knowledge_base (5 results)</li>
+                        <li>Routing: semantic (confidence 0.87)</li>
+                        <li>Routes: RAG only</li>
+                        <li>Provider: OpenAI (gpt-4o-mini)</li>
+                        <li>Iterations: 2</li>
+                    </ul>
+
+                    <h4>Retrieved Docs:</h4>
+                    <p>Expandable cards showing playbook excerpts with similarity scores</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="data-models">
+            <h2>12. Data Models & Storage</h2>
+
+            <h3>Chroma Vector Databases</h3>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h4>1. RAG Database</h4>
+                    <p><strong>Path:</strong> <a href="../data/chroma" class="code-ref">data/chroma/</a></p>
+                    <p><strong>Collection:</strong> <code>security_docs</code></p>
+
+                    <table>
+                        <tr>
+                            <th>Field</th>
+                            <th>Type</th>
+                            <th>Example</th>
+                        </tr>
+                        <tr>
+                            <td>ID</td>
+                            <td>string</td>
+                            <td>playbook_phishing.md#0</td>
+                        </tr>
+                        <tr>
+                            <td>Document</td>
+                            <td>string</td>
+                            <td>Chunk text (800 tokens)</td>
+                        </tr>
+                        <tr>
+                            <td>Vector</td>
+                            <td>float[]</td>
+                            <td>384-dim or 1536-dim</td>
+                        </tr>
+                        <tr>
+                            <td>Metadata</td>
+                            <td>json</td>
+                            <td>source_path, doc_type</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h4>2. Routing Database</h4>
+                    <p><strong>Path:</strong> <a href="../data/routing_db" class="code-ref">data/routing_db/</a></p>
+                    <p><strong>Collection:</strong> <code>routing_examples</code></p>
+
+                    <table>
+                        <tr>
+                            <th>Field</th>
+                            <th>Type</th>
+                            <th>Example</th>
+                        </tr>
+                        <tr>
+                            <td>ID</td>
+                            <td>string</td>
+                            <td>example_0</td>
+                        </tr>
+                        <tr>
+                            <td>Document</td>
+                            <td>string</td>
+                            <td>Query text</td>
+                        </tr>
+                        <tr>
+                            <td>Vector</td>
+                            <td>float[]</td>
+                            <td>384-dim</td>
+                        </tr>
+                        <tr>
+                            <td>Metadata</td>
+                            <td>json</td>
+                            <td>use_rag, use_logs, use_web_search</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <h3>SQLite Database</h3>
+
+            <div class="card">
+                <h4>Routing Feedback DB</h4>
+                <p><strong>Path:</strong> <a href="../data/routing/routing_metrics.db" class="code-ref">data/routing/routing_metrics.db</a></p>
+
+                <table>
+                    <tr>
+                        <th>Column</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td>id</td>
+                        <td>INTEGER</td>
+                        <td>Primary key</td>
+                    </tr>
+                    <tr>
+                        <td>query</td>
+                        <td>TEXT</td>
+                        <td>User's query</td>
+                    </tr>
+                    <tr>
+                        <td>actual_route</td>
+                        <td>TEXT (JSON)</td>
+                        <td>Route system chose</td>
+                    </tr>
+                    <tr>
+                        <td>expected_route</td>
+                        <td>TEXT (JSON)</td>
+                        <td>Route user expected</td>
+                    </tr>
+                    <tr>
+                        <td>feedback_type</td>
+                        <td>TEXT</td>
+                        <td>correct/incorrect/partial</td>
+                    </tr>
+                    <tr>
+                        <td>confidence_score</td>
+                        <td>REAL</td>
+                        <td>Routing confidence (0-1)</td>
+                    </tr>
+                    <tr>
+                        <td>routing_method</td>
+                        <td>TEXT</td>
+                        <td>override/semantic/fallback</td>
+                    </tr>
+                    <tr>
+                        <td>processed</td>
+                        <td>INTEGER</td>
+                        <td>Whether incorporated into training</td>
+                    </tr>
+                    <tr>
+                        <td>timestamp</td>
+                        <td>TEXT</td>
+                        <td>ISO timestamp</td>
+                    </tr>
+                </table>
+            </div>
+
+            <h3>DuckDB + CSV</h3>
+
+            <div class="card">
+                <h4>Authentication Logs</h4>
+                <p><strong>DuckDB:</strong> <a href="../data/logs/security.duckdb" class="code-ref">data/logs/security.duckdb</a></p>
+                <p><strong>CSV Source:</strong> <a href="../data/logs/auth" class="code-ref">data/logs/auth/{YYYY-MM-DD}.csv</a></p>
+
+                <table>
+                    <tr>
+                        <th>Column</th>
+                        <th>Type</th>
+                        <th>Example</th>
+                    </tr>
+                    <tr>
+                        <td>timestamp</td>
+                        <td>TIMESTAMP</td>
+                        <td>2025-11-05T09:15:23Z</td>
+                    </tr>
+                    <tr>
+                        <td>user</td>
+                        <td>VARCHAR</td>
+                        <td>jdoe</td>
+                    </tr>
+                    <tr>
+                        <td>action</td>
+                        <td>VARCHAR</td>
+                        <td>login</td>
+                    </tr>
+                    <tr>
+                        <td>result</td>
+                        <td>VARCHAR</td>
+                        <td>failed</td>
+                    </tr>
+                    <tr>
+                        <td>ip</td>
+                        <td>VARCHAR</td>
+                        <td>185.21.54.100</td>
+                    </tr>
+                </table>
+            </div>
+        </section>
+
+        <div style="margin-top: 80px; padding: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px; text-align: center;">
+            <h2 style="color: white; margin-bottom: 25px; font-size: 2.5em;">📊 React-UI-Branch Summary</h2>
+            <div class="grid-3">
+                <div class="metric-box">
+                    <div class="metric-value">920</div>
+                    <div class="metric-label">Lines (main.py)</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value">3</div>
+                    <div class="metric-label">Routing Tiers</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value">3</div>
+                    <div class="metric-label">LLM Providers</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value">5</div>
+                    <div class="metric-label">Max Agent Iterations</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value">60min</div>
+                    <div class="metric-label">Conversation TTL</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value">40+</div>
+                    <div class="metric-label">Routing Examples</div>
+                </div>
+            </div>
+            <div style="margin-top: 40px; font-size: 1.3em;">
+                <p><strong>Advanced Features:</strong> Semantic Routing | Function Calling | Continuous Learning | Web Search | React UI</p>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px; text-align: center; color: #666;">
+            <p style="font-size: 1.1em;"><strong>AI Incident Assistant - React-UI-Branch</strong></p>
+            <p>Technical Architecture Documentation</p>
+            <p>Generated: November 2025</p>
+        </div>
+    </div>
+</body>
+</html>
