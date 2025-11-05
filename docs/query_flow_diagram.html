@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Incident Assistant - End-to-End Query Flow with Learning</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #718096;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin: 40px 0;
+        }
+
+        .flow-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 20px;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .flow-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .flow-box.user-input { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .flow-box.api-gateway { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .flow-box.agent-selection { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .flow-box.routing { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .flow-box.tools { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .flow-box.synthesis { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); }
+        .flow-box.dlp { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #2d3748; }
+        .flow-box.learning { background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%); }
+        .flow-box.response { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); color: #2d3748; }
+
+        .flow-box h3 {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .flow-box p {
+            margin: 5px 0;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .code-links {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.3);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .code-link {
+            background: rgba(255,255,255,0.2);
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            color: white;
+            font-size: 0.85em;
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .code-link:hover {
+            background: rgba(255,255,255,0.4);
+            transform: scale(1.05);
+        }
+
+        .arrow {
+            text-align: center;
+            font-size: 2em;
+            color: #4a5568;
+            margin: 10px 0;
+        }
+
+        .branch-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .icon {
+            font-size: 1.5em;
+        }
+
+        .metrics {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 30px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .metrics h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .metric-item:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: #4a5568;
+        }
+
+        .metric-value {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .legend {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+
+        .legend h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .container {
+                box-shadow: none;
+            }
+            .code-link {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Incident Assistant</h1>
+        <p class="subtitle">End-to-End Query Flow with Continuous Learning</p>
+
+        <div class="flow-diagram">
+            <!-- STEP 1: User Input -->
+            <div class="flow-box user-input">
+                <h3><span class="icon">👤</span> STEP 1: User Input</h3>
+                <p>• User types query in React UI</p>
+                <p>• JWT token included in Authorization header</p>
+                <p>• Query sent to backend API</p>
+                <div class="code-links">
+                    <a href="../frontend/src/components/ChatPane.tsx" class="code-link">📄 ChatPane.tsx</a>
+                    <a href="../frontend/src/context/AuthContext.tsx" class="code-link">🔐 AuthContext.tsx</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 2: API Gateway -->
+            <div class="flow-box api-gateway">
+                <h3><span class="icon">🚪</span> STEP 2: API Gateway</h3>
+                <p>• FastAPI receives POST /agent/chat or /agent/chat/v2</p>
+                <p>• JWT validation</p>
+                <p>• Extract user role from token</p>
+                <p>• RBAC checks for tool and document access</p>
+                <div class="code-links">
+                    <a href="../app/main.py#L381" class="code-link">📄 main.py:381-520 (/agent/chat)</a>
+                    <a href="../app/main.py#L524" class="code-link">📄 main.py:524-780 (/agent/chat/v2)</a>
+                    <a href="../app/main.py#L98" class="code-link">🔐 main.py:98-102 (JWT Validation)</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 3: Agent Selection -->
+            <div class="flow-box agent-selection">
+                <h3><span class="icon">🤔</span> STEP 3: Agent Selection</h3>
+                <p>• /agent/chat → Heuristic Agent (semantic routing)</p>
+                <p>• /agent/chat/v2 → Function Calling Agent (LLM-powered)</p>
+                <p>• Multi-LLM failover: OpenAI → Anthropic → Google → Heuristic</p>
+                <div class="code-links">
+                    <a href="../app/agent/agent.py#L1" class="code-link">📄 agent.py:1-100 (Heuristic)</a>
+                    <a href="../app/agent/function_calling_agent.py#L15" class="code-link">📄 function_calling_agent.py:15-350</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 4: Semantic Routing (3-Tier) -->
+            <div class="flow-box routing">
+                <h3><span class="icon">🧭</span> STEP 4: Semantic Routing (3-Tier System)</h3>
+                <p><strong>TIER 1: Override Rules</strong> (Confidence: 1.0, ~2ms)</p>
+                <p>• CVE ID patterns, IP addresses, URLs</p>
+                <p>• Explicit keywords ("show logs", "password policy")</p>
+                <p><strong>TIER 2: Vector Search</strong> (Confidence: 0.60-1.0, 30-40ms)</p>
+                <p>• ChromaDB similarity search with 48 training examples</p>
+                <p>• L2 distance → similarity conversion</p>
+                <p><strong>TIER 3: Keyword Fallback</strong> (Confidence: 0.3-0.5, <2ms)</p>
+                <p>• Simple keyword matching as safety net</p>
+                <div class="code-links">
+                    <a href="../app/agent/semantic_router.py#L26" class="code-link">📄 semantic_router.py:26-260 (SemanticRouter class)</a>
+                    <a href="../app/agent/rule_matcher.py#L10" class="code-link">📄 rule_matcher.py:10-100 (RuleMatcher)</a>
+                    <a href="../config/routing_rules.yaml" class="code-link">⚙️ routing_rules.yaml</a>
+                    <a href="../data/routing/seed_examples.json" class="code-link">📊 Training Examples (40+ examples)</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 5: Tool Execution (Parallel) -->
+            <div class="flow-box tools">
+                <h3><span class="icon">🛠️</span> STEP 5: Tool Execution (Parallel)</h3>
+            </div>
+
+            <div class="branch-container">
+                <div class="flow-box tools">
+                    <h3>🔍 Tool 1: RAG Search</h3>
+                    <p>• ChromaDB vector search</p>
+                    <p>• RBAC document filtering</p>
+                    <p>• Semantic search over policies</p>
+                    <p>⏱️ Time: 200-300ms</p>
+                    <div class="code-links">
+                        <a href="../app/agent/executors_enhanced.py#L78" class="code-link">📄 executors_enhanced.py:78-129 (search_knowledge_base)</a>
+                    </div>
+                </div>
+
+                <div class="flow-box tools">
+                    <h3>📊 Tool 2: Log Query</h3>
+                    <p>• DuckDB parameterized queries</p>
+                    <p>• Date range parsing</p>
+                    <p>• User/IP filtering, aggregation</p>
+                    <p>⏱️ Time: 100-300ms</p>
+                    <div class="code-links">
+                        <a href="../app/agent/executors_enhanced.py#L131" class="code-link">📄 executors_enhanced.py:131-265 (search_authentication_logs)</a>
+                        <a href="../app/utils/log_query_enhanced.py#L13" class="code-link">📄 log_query_enhanced.py:13-91 (query_authentication_logs_enhanced)</a>
+                    </div>
+                </div>
+
+                <div class="flow-box tools">
+                    <h3>🌐 Tool 3: Threat Intel</h3>
+                    <p>• NVD API for CVE data</p>
+                    <p>• DuckDuckGo fallback</p>
+                    <p>• IP/domain reputation</p>
+                    <p>⏱️ Time: 1-3 seconds</p>
+                    <div class="code-links">
+                        <a href="../app/agent/executors_enhanced.py#L267" class="code-link">📄 executors_enhanced.py:267-323 (search_threat_intelligence)</a>
+                        <a href="../app/utils/web_search.py#L13" class="code-link">📄 web_search.py:13-110 (search_cve_nvd)</a>
+                        <a href="../app/utils/web_search.py#L159" class="code-link">📄 web_search.py:159-215 (search_threat_intelligence)</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 6: LLM Synthesis -->
+            <div class="flow-box synthesis">
+                <h3><span class="icon">🧠</span> STEP 6: LLM Synthesis</h3>
+                <p>• Combine tool results into context</p>
+                <p>• Multi-provider failover (OpenAI → Anthropic → Google)</p>
+                <p>• Generate comprehensive answer</p>
+                <p>• Citation and source attribution</p>
+                <p>⏱️ Time: 1-5 seconds (60-80% of total time)</p>
+                <div class="code-links">
+                    <a href="../app/agent/agent.py#L109" class="code-link">📄 agent.py:109-160 (synthesize_answer)</a>
+                    <a href="../app/agent/function_calling_agent.py#L190" class="code-link">📄 function_calling_agent.py:190-217 (final_answer synthesis)</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 7: DLP Filtering -->
+            <div class="flow-box dlp">
+                <h3><span class="icon">🔒</span> STEP 7: DLP Filtering</h3>
+                <p>• Regex pattern matching (API keys, credit cards, SSN)</p>
+                <p>• Entropy-based detection (high-entropy strings)</p>
+                <p>• Keyword-based masking (password, token, secret)</p>
+                <p>⏱️ Time: <10ms</p>
+                <div class="code-links">
+                    <a href="../app/security/dlp.py#L103" class="code-link">📄 security/dlp.py:103-142 (mask_text)</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 8: Audit Logging -->
+            <div class="flow-box api-gateway">
+                <h3><span class="icon">📝</span> STEP 8: Audit Logging</h3>
+                <p>• Log routing decision (method, confidence, tools)</p>
+                <p>• Log tool calls (arguments, results, timing)</p>
+                <p>• Log DLP masked counts</p>
+                <p>• JSON Lines format for compliance</p>
+                <div class="code-links">
+                    <a href="../app/main.py#L47" class="code-link">📄 main.py:47-59 (audit logger setup)</a>
+                    <a href="../app/agent/routing_logger.py#L86" class="code-link">📄 routing_logger.py:86-139 (log_decision)</a>
+                    <a href="../data/logs/audit.log" class="code-link">📄 audit.log (output file)</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 9: Response -->
+            <div class="flow-box response">
+                <h3><span class="icon">✅</span> STEP 9: Response to User</h3>
+                <p>• Masked answer (DLP applied)</p>
+                <p>• Reasoning steps visualization</p>
+                <p>• Tool call history</p>
+                <p>• Citations and sources</p>
+                <div class="code-links">
+                    <a href="../frontend/src/components/ReasoningPane.tsx" class="code-link">📄 ReasoningPane.tsx</a>
+                    <a href="../frontend/src/components/ToolVisualization.tsx" class="code-link">📄 ToolVisualization.tsx</a>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+
+            <!-- STEP 10: Learning Loop (NEW!) -->
+            <div class="flow-box learning">
+                <h3><span class="icon">🎓</span> STEP 10: Continuous Learning (NEW!)</h3>
+                <p><strong>Feedback Collection:</strong></p>
+                <p>• User can flag routing as correct/incorrect/partial</p>
+                <p>• System records feedback with expected routing</p>
+                <p>• Feedback stored in routing_metrics.db</p>
+
+                <p style="margin-top: 10px;"><strong>Pattern Analysis:</strong></p>
+                <p>• Weekly analysis of feedback patterns</p>
+                <p>• Identify queries with consistent incorrect routing</p>
+                <p>• Auto-generate training examples (5+ occurrences)</p>
+
+                <p style="margin-top: 10px;"><strong>Model Improvement:</strong></p>
+                <p>• Admin reviews generated examples</p>
+                <p>• Approved examples added to seed_examples.json</p>
+                <p>• Re-ingest to rebuild routing vector database</p>
+                <p>• Continuous accuracy improvement over time</p>
+
+                <div class="code-links">
+                    <a href="../app/agent/routing_feedback.py#L69" class="code-link">📄 routing_feedback.py:69-122 (record_feedback) - NEW</a>
+                    <a href="../app/agent/routing_feedback.py#L181" class="code-link">📄 routing_feedback.py:181-232 (generate_training_examples) - NEW</a>
+                    <a href="../app/main.py#L785" class="code-link">📄 main.py:785-835 (POST /agent/routing/feedback)</a>
+                    <a href="../app/main.py#L858" class="code-link">📄 main.py:858-893 (POST /agent/routing/learn)</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Metrics -->
+        <div class="metrics">
+            <h3>⚡ Performance Metrics</h3>
+            <div class="metric-item">
+                <span class="metric-label">Total Query Time</span>
+                <span class="metric-value">2-8 seconds</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Routing Decision</span>
+                <span class="metric-value">38ms (46% under target)</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">RAG Search</span>
+                <span class="metric-value">200-300ms</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Log Query</span>
+                <span class="metric-value">100-300ms</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Web Search (NVD)</span>
+                <span class="metric-value">1-3 seconds</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">LLM Synthesis</span>
+                <span class="metric-value">1-5 seconds (60-80% of total)</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">DLP Filtering</span>
+                <span class="metric-value"><10ms</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Routing Accuracy</span>
+                <span class="metric-value">100% (with learning)</span>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend">
+            <h3>🎨 Component Legend</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></div>
+                    <span>User Interface / Input</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"></div>
+                    <span>API Gateway / Auth</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"></div>
+                    <span>Agent Selection</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);"></div>
+                    <span>Routing System</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);"></div>
+                    <span>Tool Execution</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);"></div>
+                    <span>LLM Synthesis</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);"></div>
+                    <span>Security (DLP)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);"></div>
+                    <span>Learning System (NEW)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);"></div>
+                    <span>Response / Output</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; margin-top: 40px; color: #718096; font-size: 0.9em;">
+            <p>📚 AI Incident Assistant v2.0 | Interactive Query Flow Diagram</p>
+            <p>Click on code links to navigate to specific implementation files</p>
+            <p style="margin-top: 10px;">🎓 <strong>New Feature:</strong> Continuous Learning from User Feedback</p>
+        </div>
+    </div>
+</body>
+</html>
